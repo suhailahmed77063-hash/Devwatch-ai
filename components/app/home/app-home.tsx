@@ -5,10 +5,16 @@ import { ExamplePrompts } from '@/components/shared/example-prompts';
 import { getDisplayName } from '@/lib/app-data';
 import { useSearchParams } from 'next/navigation';
 import { useEffect, useRef, useState, useTransition } from 'react';
-
 import type { ProjectCategory } from '@/lib/types';
 import { useToast } from '@/components/ui/toast';
 import { AppPromptInput } from './app-prompt-input';
+import { useHeroPromptDraftRestore } from '@/lib/hooks/use-hero-prompt-draft';
+import {
+  buildProjectFormData,
+  clearHeroPromptState,
+  loadHeroPromptDraft,
+} from '@/lib/hero-prompt-draft';
+import { createProjectAction } from '@/lib/actions/projects';
 
 type AppHomeProps = {
   user?: {
@@ -21,14 +27,98 @@ type AppHomeProps = {
 export function AppHome({ user }: AppHomeProps) {
   const searchParams = useSearchParams();
   const { error: toastError } = useToast();
+
+  const {
+    value,
+    setValue,
+    attachments,
+    setAttachments,
+    planMode,
+    setPlanMode,
+    selectedCategory,
+    setSelectedCategory,
+    ready,
+  } = useHeroPromptDraftRestore();
+
   const [error, setError] = useState<string | null>(null);
-  const [isPending, startTranstion] = useTransition();
-  const audostartedRef = useRef(false);
+  const [isPending, startTransition] = useTransition();
+  const autostartedRef = useRef(false);
 
   const displayName = getDisplayName(user?.name, user?.email);
 
+  function submitProject(
+    prompt: string,
+    nextAttachments: typeof attachments,
+    nextPlanMode: boolean,
+    nextCategory: ProjectCategory | null,
+  ) {
+    setError(null);
+
+    startTransition(async () => {
+      const formData = buildProjectFormData({
+        prompt,
+        planMode: nextPlanMode,
+        categoryId: nextCategory?.id,
+        attachments: nextAttachments,
+      });
+
+      const result = await createProjectAction(formData);
+      if (result && 'error' in result && result.error) {
+        setError(result.error);
+        toastError(result.error);
+        return;
+      }
+      await clearHeroPromptState();
+    });
+  }
+
+  useEffect(() => {
+    if (!ready || autostartedRef.current || isPending) return;
+
+    const shouldAutostart =
+      searchParams.get('autostart') === '1' || loadHeroPromptDraft()?.autostart;
+
+    if (!shouldAutostart) return;
+
+    const draft = loadHeroPromptDraft();
+    const prompt = draft?.value?.trim() ?? value.trim();
+    const hasContent = Boolean(prompt) || attachments.length > 0;
+
+    if (!hasContent) return;
+
+    autostartedRef.current = true;
+    void clearHeroPromptState();
+    setTimeout(() => {
+      submitProject(
+        prompt,
+        attachments,
+        draft?.planMode ?? planMode,
+        selectedCategory,
+      );
+    }, 100);
+  }, [
+    ready,
+    searchParams,
+    value,
+    attachments,
+    planMode,
+    selectedCategory,
+    isPending,
+    submitProject,
+  ]);
+
   function handleCategoryToggle(category: ProjectCategory) {
-    console.log(category);
+    setSelectedCategory((current) =>
+      current?.id === category.id ? null : category,
+    );
+  }
+
+  function handleSubmit(prompt: string) {
+    submitProject(prompt, attachments, planMode, selectedCategory);
+  }
+
+  function handleExampleSelect(text: string) {
+    setValue(text);
   }
 
   return (
@@ -39,8 +129,19 @@ export function AppHome({ user }: AppHomeProps) {
         </h1>
 
         <div className="mt-8 w-full max-w-[720px]">
-          {/* <AppPromptInput /> */}
-          <AppPromptInput value="testing" />
+          <AppPromptInput
+            value={value}
+            onChange={setValue}
+            onSubmit={handleSubmit}
+            selectedCategory={selectedCategory}
+            onRemoveCategory={() => setSelectedCategory(null)}
+            attachments={attachments}
+            onAttachmentsChange={setAttachments}
+            planMode={planMode}
+            onPlanModeChange={setPlanMode}
+            onError={toastError}
+            disabled={isPending}
+          />
 
           {error ? (
             <p className="mt-3 text-center text-sm text-replit-orange">
@@ -58,13 +159,13 @@ export function AppHome({ user }: AppHomeProps) {
         <div className="mx-auto mt-[17px] w-full max-w-hero-prompt tablet-up:max-w-hero-prompt-tablet">
           <CategoryCarousel
             variant="app"
-            selectedCategoryId={null}
+            selectedCategoryId={selectedCategory?.id ?? null}
             onCategoryToggle={handleCategoryToggle}
           />
         </div>
 
         <div className="mt-10 w-full max-w-[720px]">
-          <ExamplePrompts variant="app" />
+          <ExamplePrompts variant="app" onSelect={handleExampleSelect} />
         </div>
       </div>
     </main>

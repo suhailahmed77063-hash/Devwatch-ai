@@ -1,6 +1,9 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import { RootProviders } from '@/components/root-providers';
+import { AuthSessionProvider } from '@/components/auth/session-provider';
+import { AuthModalProvider } from '@/components/auth/auth-modal-provider';
+import { AuthUrlSync } from '@/components/auth/auth-url-sync';
 
 export const metadata: Metadata = {
   title: 'Replit - Build apps and sites with AI',
@@ -21,7 +24,14 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full antialiased">
       <body className="min-h-full flex flex-col">
-        <RootProviders>{children}</RootProviders>
+        <AuthSessionProvider>
+          <AuthModalProvider>
+            <RootProviders>
+              <AuthUrlSync />
+              {children}
+            </RootProviders>
+          </AuthModalProvider>
+        </AuthSessionProvider>
       </body>
     </html>
   );

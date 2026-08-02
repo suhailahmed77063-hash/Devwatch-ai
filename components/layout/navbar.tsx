@@ -8,6 +8,8 @@ import type { NavGroup, NavLink } from '@/lib/types';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { AgentBadge } from '../ui/agent-badge';
+import { AuthNavActions } from '../auth/auth-nav-actions';
+import type { AuthNavUser } from '@/lib/types/account';
 
 const navGhostClass =
   'flex h-8 items-center rounded-md px-2 text-text-secondary transition-colors hover:bg-[#e8e7e3] hover:text-[#212225]';
@@ -112,7 +114,7 @@ function MobileNavMenu({
 }: {
   open: boolean;
   onClose: () => void;
-  initialUser: null;
+  initialUser: AuthNavUser | null;
 }) {
   const [expandedGroup, setExpandedGroup] = useState<string | null>('Products');
 
@@ -206,13 +208,20 @@ function MobileNavMenu({
           className="flex h-8 items-center rounded-md bg-[#e8e7e3] px-2 text-sm text-[#212225] transition-colors hover:bg-[#e0dfdb]">
           Contact Sale
         </Link>
-        <p>Sign up - Login</p>
+        <AuthNavActions
+          initialUser={initialUser}
+          createAccountClassName="inline-flex h-[41px] items-center justify-center rounded-full border-[1.5px] border-replit-orange bg-transparent px-5 text-sm font-medium text-replit-orange transition-colors hover:bg-replit-orange hover:text-white"
+        />
       </div>
     </div>
   );
 }
 
-export function Navbar({ initialUser = null }) {
+export function Navbar({
+  initialUser = null,
+}: {
+  initialUser?: AuthNavUser | null;
+}) {
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -296,7 +305,10 @@ export function Navbar({ initialUser = null }) {
             Contact Sales
           </Link>
 
-          <p>Sign Up - Login</p>
+          <AuthNavActions
+            initialUser={initialUser}
+            createAccountClassName="inline-flex items-center justify-center rounded-full border-[1.5px] border-replit-orange bg-transparent px-3 py-1.5 text-[13px] font-medium tracking-[-0.02em] text-replit-orange transition-[background-color,color] duration-150 hover:bg-replit-orange hover:text-white"
+          />
 
           <button
             type="button"

@@ -7,6 +7,8 @@ import { useEffect, useState } from 'react';
 import type { AppWorkspace } from '@/lib/app-types';
 import { cn } from '@/lib/utils';
 import { Avatar } from '@/components/ui/avatar';
+import { AccountMenuPanel } from './account-menu';
+import { WorkspaceSelector } from './workspace-selector';
 
 type AppSidebarProps = {
   workspaces: AppWorkspace[];
@@ -65,8 +67,11 @@ export function AppSidebar({
       </div>
 
       <div className="px-3 pb-2">
-        {/* WorkspaceSelector */}
-        Workspace
+        <WorkspaceSelector
+          workspaces={workspaces}
+          activeWorkspaceSlug={activeWorkspaceSlug}
+          user={user}
+        />
       </div>
 
       <div className="px-3 pb-3">
@@ -121,8 +126,11 @@ export function AppSidebar({
 
         <div className="relative w-full">
           {accountOpen ? (
-            // <AccountMenuPanel />
-            <p>AccountMenupanel</p>
+            <AccountMenuPanel
+              user={user}
+              onClose={() => setAccountOpen(false)}
+              className="absolute bottom-full left-0 z-50 mb-2 w-full"
+            />
           ) : null}
 
           <button
@@ -137,15 +145,18 @@ export function AppSidebar({
                 : 'hover:bg-app-surface-hover',
             )}>
             {/* Avatar */}
-            <Avatar size="sm" theme="app" name="Ali Murtaza" />
+            <Avatar
+              size="sm"
+              theme="app"
+              name="Ali Murtaza"
+              image={user.image}
+            />
             <div className="min-w-0 flex-1">
               <p className="truncate text-sm text-app-text">
-                {/* {user.name ?? 'Account'} */}
-                Account
+                {user.name ?? 'Account'}
               </p>
               <p className="truncate text-xs text-app-text-muted">
-                {/* {user.email ?? 'View menu'} */}
-                View menu
+                {user.email ?? 'View menu'}
               </p>
             </div>
           </button>

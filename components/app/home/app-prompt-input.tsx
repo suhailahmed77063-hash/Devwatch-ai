@@ -6,6 +6,8 @@ import { PromptAttachment } from '@/lib/prompt-attachments';
 import { formatFileSize } from '@/lib/prompt-attachments';
 import { cn } from '@/lib/utils';
 import { CategoryIcon } from '@/components/shared/category-icons';
+import { useSpeechRecognition } from '@/lib/hooks/use-speech-recognition';
+import { PromptAttachmentDialog } from './prompt-attachment-dialog';
 
 type AppPromptInputProps = {
   value: string;
@@ -88,13 +90,74 @@ export function AppPromptInput({
 }: AppPromptInputProps) {
   const isLanding = variant === 'landing';
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const speechPrefRef = useRef(value);
+  const speechPrefixRef = useRef(value);
   const [attachmentDialogOpen, setAttachmentDialogOpen] = useState(false);
   const hasValue = Boolean(value.trim());
   const hasAttachments = attachments.length > 0;
   const canSubmit = hasValue || hasAttachments;
 
-  const isListening = false;
+  const { isListening, isSupported, toggleListening, stopListening } =
+    useSpeechRecognition({
+      onTranscript: (transcript, isFinal) => {
+        const trimmed = transcript.trim();
+        if (!trimmed) return;
+
+        if (isFinal) {
+          const prefix = speechPrefixRef.current;
+          const separator = prefix && !/\s$/.test(prefix) ? ' ' : '';
+          const next = `${prefix}${separator}${trimmed}`;
+          speechPrefixRef.current = next;
+          onChange(next);
+          return;
+        }
+
+        const prefix = speechPrefixRef.current;
+        const separator = prefix && !/\s$/.test(prefix) ? ' ' : '';
+        onChange(`${prefix}${separator}${transcript}`);
+      },
+      onError: (message) => onError?.(message),
+    });
+
+  useEffect(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    const maxHeight = isLanding ? 200 : 160;
+    textarea.style.height = `${Math.min(textarea.scrollHeight, maxHeight)}px`;
+  }, [value, isLanding]);
+
+  useEffect(() => {
+    if (!isListening) {
+      speechPrefixRef.current = value;
+    }
+  }, [isListening, value]);
+
+  useEffect(() => {
+    if (disabled && isListening) {
+      stopListening();
+    }
+  }, [disabled, isListening, stopListening]);
+
+  function handleSubmit() {
+    if (!canSubmit || disabled) return;
+    stopListening();
+    onSubmit?.(value.trim());
+  }
+
+  function handleMicClick() {
+    if (!isSupported) {
+      onError?.(
+        'Voice input is not supported in this browser. Try Chrome or Edge.',
+      );
+      return;
+    }
+
+    if (!isListening) {
+      speechPrefixRef.current = value;
+    }
+
+    toggleListening();
+  }
 
   function handleRemoveAttachment(id: string) {
     onAttachmentsChange?.(
@@ -104,7 +167,16 @@ export function AppPromptInput({
 
   return (
     <>
-      {/* <PromptAttachmentDialog /> */}
+      <PromptAttachmentDialog
+        open={attachmentDialogOpen}
+        onClose={() => setAttachmentDialogOpen(false)}
+        currentCount={attachments.length}
+        variant={variant}
+        onAdd={(nextAttachments) =>
+          onAttachmentsChange?.([...attachments, ...nextAttachments])
+        }
+        onError={onError}
+      />
 
       <div
         className={cn(
@@ -177,8 +249,14 @@ export function AppPromptInput({
               ref={textareaRef}
               value={value}
               onChange={(event) => {
-                speechPrefRef.current = event.target.value;
+                speechPrefixRef.current = event.target.value;
                 onChange(event.target.value);
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && !event.shiftKey) {
+                  event.preventDefault();
+                  handleSubmit();
+                }
               }}
               placeholder={
                 isLanding
@@ -206,6 +284,7 @@ export function AppPromptInput({
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               <button
                 type="button"
+                onClick={() => setAttachmentDialogOpen(true)}
                 className={cn(
                   'flex h-8 w-8 shrink-0 items-center justify-center transition-colors disabled:opacity-60',
                   isLanding
@@ -286,6 +365,7 @@ export function AppPromptInput({
               <button
                 type="button"
                 disabled={disabled}
+                onClick={handleMicClick}
                 className={cn(
                   'flex h-8 w-8 items-center justify-center rounded-lg transition-colors disabled:opacity-60',
                   isListening
@@ -311,6 +391,7 @@ export function AppPromptInput({
                       ? 'h-8 gap-1 bg-replit-orange px-3 text-sm font-medium text-white'
                       : 'h-8 w-8 bg-[#ffb199] text-white',
                   )}
+                  onClick={handleSubmit}
                   aria-label="Start">
                   {canSubmit ? (
                     <>
@@ -350,6 +431,7 @@ export function AppPromptInput({
                       ? 'bg-app-text text-app-bg hover:bg-app-text-secondary'
                       : 'bg-app-surface-active text-app-text-muted',
                   )}
+                  onClick={handleSubmit}
                   aria-label="Submit prompt">
                   <ArrowUpIcon />
                 </button>

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { AppWorkspace } from '@/lib/app-types';
 import { AppSidebar } from './app-sidebar';
+import { CommandPalette } from './command-pallete';
 
 type AppSheellProps = {
   children: React.ReactNode;
@@ -21,10 +22,22 @@ export function AppShell({
   activeWorkspaceSlug,
   user,
 }: AppSheellProps) {
-  const [commandOpen, setComamndOpen] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
 
   const openCommand = useCallback(() => {
-    setComamndOpen(true);
+    setCommandOpen(true);
+  }, []);
+
+  useEffect(() => {
+    function handleKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
+        event.preventDefault();
+        setCommandOpen((current) => !current);
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   return (
@@ -43,6 +56,10 @@ export function AppShell({
       </div>
 
       {/* CommandPalette */}
+      <CommandPalette
+        open={commandOpen}
+        onClose={() => setCommandOpen(false)}
+      />
     </div>
   );
 }
