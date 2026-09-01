@@ -6,11 +6,18 @@ import { users } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import bcrypt from "bcryptjs";
 
+const authUrl = process.env.AUTH_URL || process.env.NEXTAUTH_URL || "http://localhost:3000";
+
 export default {
   providers: [
     GitHub({
       clientId: process.env.GITHUB_CLIENT_ID,
       clientSecret: process.env.GITHUB_CLIENT_SECRET,
+      authorization: {
+        params: {
+          redirect_uri: `${authUrl}/api/auth/callback/github`,
+        },
+      },
     }),
     Credentials({
       name: "credentials",
@@ -23,31 +30,36 @@ export default {
           return null;
         }
 
-        const user = await db
-          .select()
-          .from(users)
-          .where(eq(users.email, credentials.email as string))
-          .limit(1);
+        try {
+          const user = await db
+            .select()
+            .from(users)
+            .where(eq(users.email, credentials.email as string))
+            .limit(1);
 
-        if (!user[0]) {
+          if (!user[0] || !user[0].passwordHash) {
+            return null;
+          }
+
+          const isValid = await bcrypt.compare(
+            credentials.password as string,
+            user[0].passwordHash
+          );
+
+          if (!isValid) {
+            return null;
+          }
+
+          return {
+            id: user[0].id,
+            email: user[0].email,
+            name: user[0].name,
+            image: user[0].image,
+          };
+        } catch (error) {
+          console.error("Auth error:", error);
           return null;
         }
-
-        const isValid = await bcrypt.compare(
-          credentials.password as string,
-          user[0].passwordHash || ""
-        );
-
-        if (!isValid) {
-          return null;
-        }
-
-        return {
-          id: user[0].id,
-          email: user[0].email,
-          name: user[0].name,
-          image: user[0].image,
-        };
       },
     }),
   ],
@@ -72,22 +84,27 @@ export default {
     },
     async signIn({ user, account }) {
       if (account?.provider === "github") {
-        // Check if user exists, create if not
-        const existingUser = await db
-          .select()
-          .from(users)
-          .where(eq(users.githubId, account.providerAccountId))
-          .limit(1);
+        try {
+          // Check if user exists, create if not
+          const existingUser = await db
+            .select()
+            .from(users)
+            .where(eq(users.githubId, account.providerAccountId))
+            .limit(1);
 
-        if (!existingUser[0]) {
-          // Create new user from GitHub
-          await db.insert(users).values({
-            email: user.email || "",
-            name: user.name || "GitHub User",
-            image: user.image,
-            githubId: account.providerAccountId,
-            role: "viewer",
-          });
+          if (!existingUser[0]) {
+            // Create new user from GitHub
+            await db.insert(users).values({
+              email: user.email || "",
+              name: user.name || "GitHub User",
+              image: user.image,
+              githubId: account.providerAccountId,
+              role: "viewer",
+            });
+          }
+        } catch (error) {
+          console.error("GitHub sign-in error:", error);
+          // Don't block sign-in if DB fails
         }
       }
       return true;
@@ -95,6 +112,7 @@ export default {
   },
   pages: {
     signIn: "/login",
+    error: "/login",
   },
   session: {
     strategy: "jwt",
