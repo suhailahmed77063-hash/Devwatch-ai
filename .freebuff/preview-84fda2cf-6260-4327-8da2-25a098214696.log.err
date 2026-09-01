@@ -1,0 +1,12 @@
+⚠ Warning: Next.js ignored package-lock.json in C:\Users\dell because it is outside the current Git repository (C:\Users\dell\Desktop\Replit-Clone).
+ To use this directory, set `turbopack.root` in your Next.js config.
+
+⨯ Another next dev server is already running.
+
+- Local:        http://localhost:3000
+- PID:          19836
+- Dir:          C:\Users\dell\Desktop\Replit-Clone
+- Log:          .next\dev\logs\next-development.log
+
+You can access the existing server at http://localhost:3000,
+or run taskkill /PID 19836 /F to stop it and start a new one.
