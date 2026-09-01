@@ -1,14 +1,12 @@
-import type { NextConfig } from 'next';
+import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  serverExternalPackages: ['esbuild'],
+  serverExternalPackages: ["@neondatabase/serverless"],
   images: {
     remotePatterns: [
       {
-        protocol: 'https',
-        hostname: 'replit.com',
-        pathname: '/cdn-cgi/image/**',
+        protocol: "https",
+        hostname: "avatars.githubusercontent.com",
       },
     ],
   },
