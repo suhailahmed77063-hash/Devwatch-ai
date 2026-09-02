@@ -71,8 +71,8 @@ export default function SignupPage() {
         <div className="absolute inset-0 bg-[url('/grid.svg')] opacity-10" />
         <div className="relative z-10">
           <div className="flex items-center gap-3 mb-16">
-            <div className="h-12 w-12 rounded-xl bg-white/10 backdrop-blur flex items-center justify-center">
-              <Shield className="h-7 w-7" />
+            <div className="h-12 w-12 rounded-xl bg-white/10 backdrop-blur flex items-center justify-center overflow-hidden">
+              <img src="/logo.png" alt="DevWatch AI" className="h-10 w-10 object-contain" />
             </div>
             <div>
               <h1 className="text-xl font-bold">DevWatch AI</h1>
@@ -92,7 +92,7 @@ export default function SignupPage() {
       <div className="flex-1 flex flex-col">
         <div className="flex items-center justify-between p-6">
           <div className="flex items-center gap-2 lg:hidden">
-            <Shield className="h-6 w-6" />
+            <img src="/logo.png" alt="DevWatch AI" className="h-6 w-6 rounded object-contain" />
             <span className="font-bold">DevWatch AI</span>
           </div>
           <div className="ml-auto flex items-center gap-2">

@@ -55,17 +55,13 @@ export function Sidebar() {
       <div className="flex h-14 items-center border-b px-4">
         {!collapsed && (
           <Link href="/dashboard" className="flex items-center gap-2">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-sm font-bold">
-              DW
-            </div>
+            <img src="/logo.png" alt="DevWatch AI" className="h-8 w-8 rounded-lg object-contain" />
             <span className="font-heading text-base font-semibold">DevWatch AI</span>
           </Link>
         )}
         {collapsed && (
           <Link href="/dashboard" className="mx-auto">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground text-sm font-bold">
-              DW
-            </div>
+            <img src="/logo.png" alt="DevWatch AI" className="h-8 w-8 rounded-lg object-contain" />
           </Link>
         )}
       </div>
