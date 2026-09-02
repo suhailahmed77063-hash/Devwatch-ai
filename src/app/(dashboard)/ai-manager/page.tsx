@@ -18,6 +18,7 @@ const SUGGESTED_QUESTIONS = [
   { icon: GitBranch, label: "What changed this week?", question: "What changed this week?" },
   { icon: AlertTriangle, label: "Which PRs are risky?", question: "Which PRs are risky?" },
   { icon: Shield, label: "Are there security problems?", question: "Are there security problems?" },
+  { icon: GitPullRequest, label: "Review PR #6 from ai-multimodal", question: "Review PR #6 from ai-multimodal" },
   { icon: FolderKanban, label: "Show me project status", question: "Show me project status" },
   { icon: Users, label: "Summarize the team", question: "Summarize the team's work" },
 ];
@@ -68,13 +69,49 @@ export default function AIManagerPage() {
     setIsTyping(true);
 
     try {
-      const response = await fetch("/api/ai/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text, orgId: undefined }),
-      });
+      // Check if user wants a code review
+      const reviewMatch = text.match(/review\s+(?:pr\s*)?#?(\d+)\s+(?:from|in|of|on)\s+(\S+)/i)
+        || text.match(/review\s+(\S+)\s+#?(\d+)/i)
+        || text.match(/(?:pr|pull request)\s+#?(\d+)\s+(?:from|in|of|on)\s+(\S+)/i);
 
-      const data = await response.json();
+      let data;
+
+      if (reviewMatch) {
+        const prNumber = parseInt(reviewMatch[1]);
+        const repoName = reviewMatch[2].toLowerCase();
+
+        // Find repo ID from name
+        const reposRes = await fetch("/api/repositories");
+        const reposData = await reposRes.json();
+        const repo = reposData.repos?.find((r: { name: string; fullName: string }) =>
+          r.name.toLowerCase() === repoName || r.fullName?.toLowerCase().includes(repoName)
+        );
+
+        if (repo) {
+          // Call the code review API
+          const reviewRes = await fetch("/api/ai/review", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              repoId: repo.id,
+              prNumber: prNumber,
+              githubToken: "",
+            }),
+          });
+          const reviewData = await reviewRes.json();
+          data = { response: reviewData.review || "Review completed but no results returned." };
+        } else {
+          data = { response: `Repository \"${repoName}\" not found. Available repos: ${reposData.repos?.map((r: { name: string }) => r.name).join(", ") || "none"}` };
+        }
+      } else {
+        // Regular chat
+        const response = await fetch("/api/ai/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: text }),
+        });
+        data = await response.json();
+      }
 
       const assistantMessage: Message = {
         role: "assistant",

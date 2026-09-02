@@ -5,10 +5,13 @@ import { eq } from "drizzle-orm";
 
 export async function POST(request: NextRequest) {
   try {
-    const { githubToken, repoId, prNumber, prId } = await request.json();
+    const { githubToken: requestToken, repoId, prNumber, prId } = await request.json();
+
+    // Use provided token or fall back to env variable
+    const githubToken = requestToken || process.env.GITHUB_TOKEN;
 
     if (!githubToken) {
-      return NextResponse.json({ error: "GitHub token is required" }, { status: 400 });
+      return NextResponse.json({ error: "GitHub token is required. Please set GITHUB_TOKEN environment variable or provide it in the request." }, { status: 400 });
     }
 
     let repo;
