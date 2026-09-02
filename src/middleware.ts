@@ -23,11 +23,13 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check for session token (all variants)
+  // Check for NextAuth v5 session cookie (authjs) OR v4 cookie (next-auth)
   const hasToken =
+    request.cookies.has("authjs.session-token") ||
+    request.cookies.has("__Secure-authjs.session-token") ||
+    request.cookies.has("__Host-authjs.session-token") ||
     request.cookies.has("next-auth.session-token") ||
-    request.cookies.has("__Secure-next-auth.session-token") ||
-    request.cookies.has("__Host-next-auth.session-token");
+    request.cookies.has("__Secure-next-auth.session-token");
 
   if (!hasToken) {
     return NextResponse.redirect(new URL("/login", request.url));
