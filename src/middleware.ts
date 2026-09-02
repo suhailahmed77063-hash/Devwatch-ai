@@ -1,27 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export function middleware(request: NextRequest) {
-  const token = request.cookies.get("next-auth.session-token")?.value
-    || request.cookies.get("__Secure-next-auth.session-token")?.value;
+  const pathname = request.nextUrl.pathname;
 
-  const isAuthPage = request.nextUrl.pathname === "/login"
-    || request.nextUrl.pathname === "/signup"
-    || request.nextUrl.pathname.startsWith("/api/auth");
+  // Only protect dashboard routes
+  const isProtected = pathname.startsWith("/dashboard") ||
+    pathname.startsWith("/repositories") ||
+    pathname.startsWith("/pull-requests") ||
+    pathname.startsWith("/commits") ||
+    pathname.startsWith("/security") ||
+    pathname.startsWith("/vulnerabilities") ||
+    pathname.startsWith("/developers") ||
+    pathname.startsWith("/projects") ||
+    pathname.startsWith("/alerts") ||
+    pathname.startsWith("/reports") ||
+    pathname.startsWith("/ai-manager") ||
+    pathname.startsWith("/releases") ||
+    pathname.startsWith("/integrations") ||
+    pathname.startsWith("/settings");
 
-  const isPublicPage = request.nextUrl.pathname === "/"
-    || request.nextUrl.pathname === "/login"
-    || request.nextUrl.pathname === "/signup";
-
-  // If not authenticated and trying to access protected page
-  if (!token && !isPublicPage && !isAuthPage) {
-    const loginUrl = new URL("/login", request.url);
-    loginUrl.searchParams.set("callbackUrl", request.url);
-    return NextResponse.redirect(loginUrl);
+  if (!isProtected) {
+    return NextResponse.next();
   }
 
-  // If authenticated and on login page, redirect to dashboard
-  if (token && isAuthPage) {
-    return NextResponse.redirect(new URL("/dashboard", request.url));
+  // Check for session token (all variants)
+  const hasToken =
+    request.cookies.has("next-auth.session-token") ||
+    request.cookies.has("__Secure-next-auth.session-token") ||
+    request.cookies.has("__Host-next-auth.session-token");
+
+  if (!hasToken) {
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
   return NextResponse.next();
@@ -29,21 +38,6 @@ export function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    "/dashboard/:path*",
-    "/repositories/:path*",
-    "/pull-requests/:path*",
-    "/commits/:path*",
-    "/security/:path*",
-    "/vulnerabilities/:path*",
-    "/developers/:path*",
-    "/projects/:path*",
-    "/alerts/:path*",
-    "/reports/:path*",
-    "/ai-manager/:path*",
-    "/releases/:path*",
-    "/integrations/:path*",
-    "/settings/:path*",
-    "/login",
-    "/signup",
+    "/((?!api|_next/static|_next/image|favicon.ico).*)",
   ],
 };

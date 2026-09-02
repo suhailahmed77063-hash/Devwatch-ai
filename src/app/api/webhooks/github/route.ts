@@ -8,8 +8,33 @@ import {
   alerts,
   activityEvents,
   ciRuns,
+  repositories,
+  organizations,
 } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+
+// Get actual org ID from database
+async function getOrgId(): Promise<string> {
+  const org = await db.select().from(organizations).limit(1);
+  if (org[0]) return org[0].id;
+  // Create default org if none exists
+  const users = await db.select().from(require("@/lib/db/schema").users).limit(1);
+  if (users[0]) {
+    const [newOrg] = await db.insert(organizations).values({
+      name: "Default",
+      slug: "default",
+      ownerId: users[0].id,
+    }).returning();
+    return newOrg.id;
+  }
+  throw new Error("No user found");
+}
+
+// Get repo ID from GitHub full name
+async function getRepoId(fullName: string): Promise<string | null> {
+  const repo = await db.select().from(repositories).where(eq(repositories.fullName, fullName)).limit(1);
+  return repo[0]?.id || null;
+}
 
 // ── Signature Validation ────────────────────────────────────────────────────
 
@@ -36,13 +61,15 @@ function validateSignature(
 // ── Event Processing ────────────────────────────────────────────────────────
 
 async function processPushEvent(payload: any) {
+  const orgId = await getOrgId();
   const repoFullName = payload.repository?.full_name;
+  const repoId = repoFullName ? await getRepoId(repoFullName) : null;
   const branch = payload.ref?.replace("refs/heads/", "");
 
   for (const commitData of payload.commits || []) {
     try {
       await db.insert(commits).values({
-        repoId: "00000000-0000-0000-0000-000000000001",
+        repoId: repoId || orgId,
         sha: commitData.id,
         message: commitData.message,
         branch,
@@ -57,22 +84,27 @@ async function processPushEvent(payload: any) {
         committedAt: new Date(commitData.timestamp || Date.now()),
       });
     } catch {
-      // Duplicate commit (idempotency) - ignore
+      // Duplicate commit - ignore
     }
   }
 
-  await db.insert(activityEvents).values({
-    orgId: "00000000-0000-0000-0000-000000000001",
-    eventType: "push",
-    payload: {
-      repo: repoFullName,
-      branch,
-      commitCount: (payload.commits || []).length,
-      pusher: payload.pusher?.name,
-    },
-    githubEventId: payload.after,
-    processedAt: new Date(),
-  });
+  try {
+    await db.insert(activityEvents).values({
+      orgId,
+      repoId: repoId || undefined,
+      eventType: "push",
+      payload: {
+        repo: repoFullName,
+        branch,
+        commitCount: (payload.commits || []).length,
+        pusher: payload.pusher?.name,
+      },
+      githubEventId: payload.after,
+      processedAt: new Date(),
+    });
+  } catch (e) {
+    console.error("Error saving activity event:", e);
+  }
 }
 
 async function processPullRequestEvent(payload: any) {
@@ -80,6 +112,10 @@ async function processPullRequestEvent(payload: any) {
   const pr = payload.pull_request;
 
   if (!pr) return;
+
+  const orgId = await getOrgId();
+  const repoFullName = payload.repository?.full_name;
+  const repoId = repoFullName ? await getRepoId(repoFullName) : null;
 
   try {
     const existing = await db
@@ -105,7 +141,7 @@ async function processPullRequestEvent(payload: any) {
         .where(eq(pullRequests.githubId, String(pr.id)));
     } else {
       await db.insert(pullRequests).values({
-        repoId: "00000000-0000-0000-0000-000000000001",
+        repoId: repoId || orgId,
         githubId: String(pr.id),
         number: pr.number,
         title: pr.title,
@@ -126,7 +162,7 @@ async function processPullRequestEvent(payload: any) {
       const totalChanges = (pr.additions || 0) + (pr.deletions || 0);
       if (totalChanges > 300 || (pr.changed_files || 0) > 10) {
         await db.insert(alerts).values({
-          orgId: "00000000-0000-0000-0000-000000000001",
+          orgId,
           type: "high_risk_pr",
           title: "High-Risk PR Opened",
           message: `PR #${pr.number} '${pr.title}' may need careful review (${totalChanges} lines changed, ${pr.changed_files} files)`,
@@ -146,13 +182,22 @@ async function processPullRequestReviewEvent(payload: any) {
   if (!review || !pr) return;
 
   try {
-    await db.insert(pullRequestReviews).values({
-      prId: "00000000-0000-0000-0000-000000000001",
-      githubId: String(review.id),
-      state: review.state,
-      body: review.body,
-      submittedAt: review.submitted_at ? new Date(review.submitted_at) : new Date(),
-    });
+    // Find the PR in our database
+    const existingPR = await db
+      .select()
+      .from(pullRequests)
+      .where(eq(pullRequests.githubId, String(pr.id)))
+      .limit(1);
+
+    if (existingPR[0]) {
+      await db.insert(pullRequestReviews).values({
+        prId: existingPR[0].id,
+        githubId: String(review.id),
+        state: review.state,
+        body: review.body,
+        submittedAt: review.submitted_at ? new Date(review.submitted_at) : new Date(),
+      });
+    }
   } catch {
     // Duplicate review - ignore
   }
@@ -162,12 +207,16 @@ async function processCheckRunEvent(payload: any) {
   const checkRun = payload.check_run || payload.check_suite;
   if (!checkRun) return;
 
+  const orgId = await getOrgId();
+  const repoFullName = payload.repository?.full_name;
+  const repoId = repoFullName ? await getRepoId(repoFullName) : null;
+
   const status = checkRun.conclusion || checkRun.status;
   const isFailure = status === "failure";
 
   if (isFailure) {
     await db.insert(alerts).values({
-      orgId: "00000000-0000-0000-0000-000000000001",
+      orgId,
       type: "ci_failure",
       title: "CI Pipeline Failing",
       message: `Check ${checkRun.name || "run"} failed with conclusion: ${status}`,
@@ -176,7 +225,7 @@ async function processCheckRunEvent(payload: any) {
   }
 
   await db.insert(ciRuns).values({
-    repoId: "00000000-0000-0000-0000-000000000001",
+    repoId: repoId || orgId,
     githubRunId: checkRun.id,
     name: checkRun.name,
     branch: checkRun.check_suite?.head_branch,
