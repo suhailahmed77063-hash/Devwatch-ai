@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { db } from "@/lib/db";
 import { developers, repositories, commits, pullRequests, securityFindings, vulnerabilities, projects, alerts, ciRuns } from "@/lib/db/schema";
 import { count, sql, eq, gte } from "drizzle-orm";

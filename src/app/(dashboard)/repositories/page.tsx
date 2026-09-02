@@ -3,6 +3,8 @@ import { repositories, pullRequests, securityFindings } from "@/lib/db/schema";
 import { desc, eq, count } from "drizzle-orm";
 import ReposClient from "./repos-client";
 
+export const dynamic = "force-dynamic";
+
 export default async function RepositoriesPage() {
   const repos = await db.select().from(repositories).orderBy(desc(repositories.updatedAt));
 

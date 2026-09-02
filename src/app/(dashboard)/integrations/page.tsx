@@ -1,3 +1,5 @@
+export const dynamic = "force-dynamic";
+
 import { db } from "@/lib/db";
 import { repositories, webhookEvents, ciRuns, integrations as integrationsTable } from "@/lib/db/schema";
 import { desc, eq, count } from "drizzle-orm";
