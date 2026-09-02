@@ -90,6 +90,70 @@ export const reportFrequencyEnum = pgEnum("report_frequency", [
   "monthly",
 ]);
 
+export const releaseStatusEnum = pgEnum("release_status", [
+  "draft",
+  "ready",
+  "blocked",
+  "deploying",
+  "deployed",
+  "failed",
+  "rolled_back",
+]);
+
+export const deploymentStatusEnum = pgEnum("deployment_status", [
+  "pending",
+  "in_progress",
+  "success",
+  "failed",
+  "cancelled",
+  "rolled_back",
+]);
+
+export const deploymentEnvironmentEnum = pgEnum("deployment_environment", [
+  "development",
+  "staging",
+  "production",
+]);
+
+export const deploymentProviderEnum = pgEnum("deployment_provider", [
+  "github_actions",
+  "vercel",
+  "aws",
+  "docker",
+  "kubernetes",
+  "other",
+]);
+
+export const riskCategoryEnum = pgEnum("risk_category", [
+  "security",
+  "stability",
+  "performance",
+  "database",
+  "api_compatibility",
+  "infrastructure",
+  "configuration",
+]);
+
+export const deploymentGateConditionEnum = pgEnum("gate_condition", [
+  "critical_security",
+  "high_security",
+  "test_failure",
+  "ci_failure",
+  "db_migration_risk",
+  "breaking_change",
+  "medium_code_quality",
+  "low_risk_pr",
+]);
+
+export const releaseNotificationTypeEnum = pgEnum("release_notification_type", [
+  "release_blocked",
+  "critical_vulnerability",
+  "deployment_failure",
+  "deployment_success",
+  "rollback_recommended",
+  "score_decreased",
+]);
+
 // ── Users & Auth ───────────────────────────────────────────────────────────
 
 export const users = pgTable(
@@ -648,5 +712,260 @@ export const webhookEvents = pgTable(
   (table) => [
     index("webhook_events_github_id_idx").on(table.githubEventId),
     index("webhook_events_processed_idx").on(table.processed),
+  ]
+);
+
+// ── Releases ───────────────────────────────────────────────────────────────
+
+export const releases = pgTable(
+  "releases",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    repoId: uuid("repo_id").references(() => repositories.id),
+    projectId: uuid("project_id").references(() => projects.id),
+    version: text("version").notNull(),
+    title: text("title"),
+    description: text("description"),
+    status: releaseStatusEnum("status").default("draft").notNull(),
+    readinessScore: integer("readiness_score").default(0),
+    scoreLabel: text("score_label"),
+    previousVersion: text("previous_version"),
+    targetCommitSha: text("target_commit_sha"),
+    targetBranch: text("target_branch").default("main"),
+    deployedAt: timestamp("deployed_at"),
+    deployedBy: uuid("deployed_by").references(() => users.id),
+    releaseSummary: text("release_summary"),
+    aiAnalysis: jsonb("ai_analysis"),
+    deploymentChecklist: jsonb("deployment_checklist"),
+    deploymentGate: jsonb("deployment_gate"),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("releases_org_idx").on(table.orgId),
+    index("releases_repo_idx").on(table.repoId),
+    index("releases_status_idx").on(table.status),
+    index("releases_version_idx").on(table.version),
+  ]
+);
+
+export const releaseCommits = pgTable(
+  "release_commits",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    releaseId: uuid("release_id")
+      .notNull()
+      .references(() => releases.id, { onDelete: "cascade" }),
+    commitId: uuid("commit_id")
+      .notNull()
+      .references(() => commits.id, { onDelete: "cascade" }),
+    includedAt: timestamp("included_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("release_commit_unique").on(table.releaseId, table.commitId),
+  ]
+);
+
+export const releasePullRequests = pgTable(
+  "release_pull_requests",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    releaseId: uuid("release_id")
+      .notNull()
+      .references(() => releases.id, { onDelete: "cascade" }),
+    prId: uuid("pr_id")
+      .notNull()
+      .references(() => pullRequests.id, { onDelete: "cascade" }),
+    riskScore: integer("risk_score"),
+    includedAt: timestamp("included_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("release_pr_unique").on(table.releaseId, table.prId),
+  ]
+);
+
+export const releaseChecks = pgTable(
+  "release_checks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    releaseId: uuid("release_id")
+      .notNull()
+      .references(() => releases.id, { onDelete: "cascade" }),
+    checkName: text("check_name").notNull(),
+    checkType: text("check_type").notNull(),
+    passed: boolean("passed").default(false),
+    message: text("message"),
+    evidence: jsonb("evidence"),
+    requiredForDeploy: boolean("required_for_deploy").default(false),
+    completedAt: timestamp("completed_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("release_checks_release_idx").on(table.releaseId),
+    index("release_checks_type_idx").on(table.checkType),
+  ]
+);
+
+export const releaseRisks = pgTable(
+  "release_risks",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    releaseId: uuid("release_id")
+      .notNull()
+      .references(() => releases.id, { onDelete: "cascade" }),
+    category: riskCategoryEnum("category").notNull(),
+    severity: severityEnum("severity").notNull(),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    evidence: text("evidence"),
+    affectedComponent: text("affected_component"),
+    recommendedAction: text("recommended_action"),
+    sourceType: text("source_type"),
+    sourceId: uuid("source_id"),
+    isAiGenerated: boolean("is_ai_generated").default(false),
+    isAcknowledged: boolean("is_acknowledged").default(false),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("release_risks_release_idx").on(table.releaseId),
+    index("release_risks_category_idx").on(table.category),
+    index("release_risks_severity_idx").on(table.severity),
+  ]
+);
+
+// ── Deployment Events ──────────────────────────────────────────────────────
+
+export const deploymentEvents = pgTable(
+  "deployment_events",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    releaseId: uuid("release_id")
+      .notNull()
+      .references(() => releases.id, { onDelete: "cascade" }),
+    environment: deploymentEnvironmentEnum("environment").notNull(),
+    provider: deploymentProviderEnum("provider"),
+    status: deploymentStatusEnum("status").default("pending").notNull(),
+    commitSha: text("commit_sha"),
+    version: text("version"),
+    externalDeploymentId: text("external_deployment_id"),
+    logs: text("logs"),
+    startedAt: timestamp("started_at"),
+    completedAt: timestamp("completed_at"),
+    duration: integer("duration"),
+    error: text("error"),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("deploy_events_release_idx").on(table.releaseId),
+    index("deploy_events_env_idx").on(table.environment),
+    index("deploy_events_status_idx").on(table.status),
+  ]
+);
+
+export const deploymentEnvironments = pgTable(
+  "deployment_environments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    type: deploymentEnvironmentEnum("type").notNull(),
+    url: text("url"),
+    isActive: boolean("is_active").default(true),
+    config: jsonb("config"),
+    lastDeployedAt: timestamp("last_deployed_at"),
+    lastDeploymentId: uuid("last_deployment_id"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("deploy_envs_org_idx").on(table.orgId),
+    index("deploy_envs_type_idx").on(table.type),
+  ]
+);
+
+// ── Rollback Recommendations ───────────────────────────────────────────────
+
+export const rollbackRecommendations = pgTable(
+  "rollback_recommendations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    releaseId: uuid("release_id")
+      .notNull()
+      .references(() => releases.id, { onDelete: "cascade" }),
+    deploymentEventId: uuid("deployment_event_id")
+      .notNull()
+      .references(() => deploymentEvents.id, { onDelete: "cascade" }),
+    likelyCause: text("likely_cause").notNull(),
+    relatedCommitSha: text("related_commit_sha"),
+    relatedPrNumber: integer("related_pr_number"),
+    affectedService: text("affected_service"),
+    previousStableVersion: text("previous_stable_version").notNull(),
+    recommendedVersion: text("recommended_version").notNull(),
+    investigationSteps: jsonb("investigation_steps"),
+    isAiAssessment: boolean("is_ai_assessment").default(true),
+    isImplemented: boolean("is_implemented").default(false),
+    implementedAt: timestamp("implemented_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("rollback_rec_release_idx").on(table.releaseId),
+    index("rollback_rec_deploy_idx").on(table.deploymentEventId),
+  ]
+);
+
+// ── Deployment Gate Config ─────────────────────────────────────────────────
+
+export const deploymentGateConfig = pgTable(
+  "deployment_gate_config",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    condition: deploymentGateConditionEnum("condition").notNull(),
+    action: text("action").default("block").notNull(),
+    isEnabled: boolean("is_enabled").default(true),
+    threshold: integer("threshold"),
+    description: text("description"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("gate_config_org_idx").on(table.orgId),
+    uniqueIndex("gate_config_org_condition_unique").on(table.orgId, table.condition),
+  ]
+);
+
+// ── Release Notifications ──────────────────────────────────────────────────
+
+export const releaseNotifications = pgTable(
+  "release_notifications",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    releaseId: uuid("release_id").references(() => releases.id),
+    userId: uuid("user_id").references(() => users.id),
+    type: releaseNotificationTypeEnum("type").notNull(),
+    title: text("title").notNull(),
+    message: text("message").notNull(),
+    severity: severityEnum("severity").notNull(),
+    isRead: boolean("is_read").default(false),
+    actionUrl: text("action_url"),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("release_notif_org_idx").on(table.orgId),
+    index("release_notif_user_idx").on(table.userId),
+    index("release_notif_read_idx").on(table.isRead),
   ]
 );

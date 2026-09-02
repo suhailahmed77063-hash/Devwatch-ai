@@ -12,6 +12,10 @@ import {
   alerts,
   activityEvents,
   developers,
+  releases,
+  deploymentEvents,
+  rollbackRecommendations,
+  releaseRisks,
 } from "@/lib/db/schema";
 import { eq, and, gte, desc, sql, count } from "drizzle-orm";
 
@@ -196,6 +200,10 @@ export interface ChatContext {
   projects: any[];
   recentAlerts: any[];
   ciStatus: any[];
+  latestRelease: any | null;
+  recentDeployments: any[];
+  recentRollbacks: any[];
+  releaseRisks: any[];
 }
 
 export async function gatherChatContext(orgId: string): Promise<ChatContext> {
@@ -207,6 +215,14 @@ export async function gatherChatContext(orgId: string): Promise<ChatContext> {
   const recentAlertList = await db.select().from(alerts).where(eq(alerts.orgId, orgId)).orderBy(desc(alerts.createdAt)).limit(20);
   const recentCI = await db.select().from(ciRuns).orderBy(desc(ciRuns.createdAt)).limit(15);
 
+  // Release data
+  const latestReleaseResult = await db.select().from(releases).where(eq(releases.orgId, orgId)).orderBy(desc(releases.createdAt)).limit(1);
+  const recentDeployments = await db.select().from(deploymentEvents).orderBy(desc(deploymentEvents.createdAt)).limit(10);
+  const recentRollbacks = await db.select().from(rollbackRecommendations).orderBy(desc(rollbackRecommendations.createdAt)).limit(5);
+  const latestRisks = latestReleaseResult[0]
+    ? await db.select().from(releaseRisks).where(eq(releaseRisks.releaseId, latestReleaseResult[0].id)).limit(10)
+    : [];
+
   return {
     repositories: repos,
     recentCommits,
@@ -215,6 +231,10 @@ export async function gatherChatContext(orgId: string): Promise<ChatContext> {
     projects: projectList,
     recentAlerts: recentAlertList,
     ciStatus: recentCI,
+    latestRelease: latestReleaseResult[0] || null,
+    recentDeployments,
+    recentRollbacks,
+    releaseRisks: latestRisks,
   };
 }
 
@@ -251,8 +271,21 @@ ${context.recentAlerts.map((a) => `- [${a.severity}] ${a.title}: ${a.message}`).
 CI/CD Status:
 ${context.ciStatus.map((c) => `- ${c.name}: ${c.status}`).join("\n") || "No recent CI runs"}
 
+Release Readiness:
+${context.latestRelease ? `${context.latestRelease.version} - Score: ${context.latestRelease.readinessScore}/100 (${context.latestRelease.scoreLabel}) [${context.latestRelease.status}]` : "No releases tracked"}
+
+Recent Deployments:
+${context.recentDeployments.map((d) => `- ${d.version} → ${d.environment}: ${d.status}`).join("\n") || "No deployments"}
+
+Recent Rollback Recommendations:
+${context.recentRollbacks.map((r) => `- Likely cause: ${r.likelyCause?.substring(0, 100)}`).join("\n") || "None"}
+
+Release Risks:
+${context.releaseRisks.map((r) => `- [${r.severity}] ${r.title} (${r.category})`).join("\n") || "No risks tracked"}
+
 Answer questions using ONLY this data. Do not invent or hallucinate information.
-Be concise, actionable, and engineering-focused.`;
+Be concise, actionable, and engineering-focused.
+For release readiness questions, use the Release Readiness data above.`;
 }
 
 export async function generateAIResponse(
@@ -351,5 +384,45 @@ function generateFallbackResponse(userMessage: string, context: ChatContext): st
     return `Recommended Focus Areas:\n${priorities.map((p, i) => `${i + 1}. ${p}`).join("\n")}`;
   }
 
-  return `I can help you with your engineering team's activity. Try asking:\n• "What changed this week?"\n• "Which PRs are risky?"\n• "Are there any security problems?"\n• "Who is blocked?"\n• "What should we focus on?"\n• "Summarize the team's work"`;
+  // Release readiness queries
+  if (lower.includes("release") || lower.includes("deploy") || lower.includes("ship")) {
+    if (lower.includes("safe") || lower.includes("ready") || lower.includes("should we deploy")) {
+      const release = context.latestRelease;
+      if (!release) return "No releases tracked yet. Create a release on the /releases page to get started.";
+      const score = release.readinessScore || 0;
+      const emoji = score >= 90 ? "🟢" : score >= 70 ? "🟡" : score >= 50 ? "🟠" : "🔴";
+      return `Release ${release.version}:\n${emoji} Score: ${score}/100 - ${release.scoreLabel}\nStatus: ${release.status}\n\n${release.releaseSummary || "No summary available."}`;
+    }
+    if (lower.includes("blocked") || lower.includes("why")) {
+      const release = context.latestRelease;
+      if (!release) return "No releases tracked.";
+      if (release.status !== "blocked") return `Release ${release.version} is not blocked. Status: ${release.status}`;
+      const gate = release.deploymentGate as Record<string, unknown> | null;
+      const reasons = (gate?.reasons as string[]) || [];
+      return `Release ${release.version} is BLOCKED:\n${reasons.map((r: string, i: number) => `${i + 1}. ${r}`).join("\n") || "Reasons not available."}`;
+    }
+    if (lower.includes("risk") || lower.includes("biggest")) {
+      if (context.releaseRisks.length === 0) return "No risks tracked for the current release.";
+      return `Current Release Risks:\n${context.releaseRisks.map((r) => `• [${r.severity}] ${r.title}: ${r.description?.substring(0, 100)}`).join("\n")}`;
+    }
+    if (lower.includes("changed") || lower.includes("since")) {
+      const release = context.latestRelease;
+      if (!release) return "No releases tracked.";
+      return `Release ${release.version} (previous: ${release.previousVersion || "N/A"}):\nScore: ${release.readinessScore}/100\n${release.releaseSummary || "No summary available."}`;
+    }
+    if (lower.includes("fail") || lower.includes("cause")) {
+      if (context.recentRollbacks.length === 0) return "No deployment failures or rollback recommendations found.";
+      const latest = context.recentRollbacks[0];
+      return `Deployment Failure Analysis:\n• Likely cause: ${latest.likelyCause}\n• Affected service: ${latest.affectedService}\n• Recommended version: ${latest.recommendedVersion}\n• Investigation steps: ${(latest.investigationSteps as string[])?.join(", ") || "N/A"}`;
+    }
+    if (lower.includes("check") || lower.includes("before")) {
+      const release = context.latestRelease;
+      if (!release) return "No release to check.";
+      const checklist = release.deploymentChecklist as Array<{ name: string; passed: boolean; message: string }> | null;
+      if (!checklist) return "No checklist available. Run release analysis first.";
+      return `Pre-deployment checklist for ${release.version}:\n${checklist.map((c) => `${c.passed ? "☑" : "☐"} ${c.name}: ${c.message}`).join("\n")}`;
+    }
+  }
+
+  return `I can help you with your engineering team's activity. Try asking:\n• "What changed this week?"\n• "Which PRs are risky?"\n• "Are there any security problems?"\n• "Who is blocked?"\n• "What should we focus on?"\n• "Summarize the team's work"\n\nRelease Readiness:\n• "Is the latest release safe to deploy?"\n• "Why is this release blocked?"\n• "What are the biggest risks?"\n• "What changed since the last release?"\n• "What caused the last deployment failure?"\n• "What should we check before production?"`;
 }
