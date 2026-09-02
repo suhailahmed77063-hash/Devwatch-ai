@@ -6,6 +6,7 @@ import {
 } from "@/components/ui/card";
 import { Bot, User, Send, GitBranch, Shield, AlertTriangle, FolderKanban, GitPullRequest, Users } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
+import { useSession } from "next-auth/react";
 
 interface Message {
   role: "user" | "assistant";
@@ -70,7 +71,7 @@ export default function AIManagerPage() {
       const response = await fetch("/api/ai/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ message: text, orgId: undefined }),
       });
 
       const data = await response.json();
