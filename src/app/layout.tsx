@@ -16,6 +16,10 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "DevWatch AI - Engineering Intelligence Platform",
   description: "AI-powered development team monitoring and code analysis",
+  icons: {
+    icon: "/favicon.png",
+    apple: "/logo.png",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
