@@ -88,10 +88,10 @@ export function EngineeringMapClient() {
 
   useEffect(() => {
     Promise.all([
-      fetch("/api/repositories").then((r) => r.json()).catch(() => ({ repositories: [] })),
+      fetch("/api/repositories").then((r) => r.json()).catch(() => ({ repos: [] })),
       fetch("/api/incidents").then((r) => r.json()).catch(() => ({ incidents: [] })),
     ]).then(([repoData, incData]) => {
-      setRepos(repoData.repositories || []);
+      setRepos(repoData.repos || repoData.repositories || []);
       setIncidents(incData.incidents || []);
       setLoading(false);
     });
