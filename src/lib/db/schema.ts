@@ -969,3 +969,229 @@ export const releaseNotifications = pgTable(
     index("release_notif_read_idx").on(table.isRead),
   ]
 );
+
+// ── Incident Severity Enum ──────────────────────────────────────────────
+export const incidentSeverityEnum = pgEnum("incident_severity", [
+  "sev1",
+  "sev2",
+  "sev3",
+  "sev4",
+]);
+
+export const incidentStatusEnum = pgEnum("incident_status", [
+  "detected",
+  "investigating",
+  "identified",
+  "monitoring",
+  "resolved",
+  "closed",
+]);
+
+export const entityTypeEnum = pgEnum("entity_type", [
+  "developer",
+  "commit",
+  "pull_request",
+  "file",
+  "service",
+  "api_endpoint",
+  "database_table",
+  "deployment",
+  "incident",
+  "repository",
+  "project",
+]);
+
+export const relationshipTypeEnum = pgEnum("relationship_type", [
+  "authored_commit",
+  "commit_in_pr",
+  "pr_changed_file",
+  "file_in_service",
+  "service_exposes_api",
+  "service_uses_db_table",
+  "pr_caused_deployment",
+  "deployment_caused_incident",
+  "incident_affected_service",
+  "incident_affected_api",
+  "project_contains_repo",
+  "repo_belongs_to_project",
+  "incident_related_pr",
+  "incident_related_commit",
+]);
+
+// ── Incidents ──────────────────────────────────────────────────────────
+export const incidents = pgTable(
+  "incidents",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    title: text("title").notNull(),
+    description: text("description"),
+    severity: incidentSeverityEnum("severity").default("sev3").notNull(),
+    status: incidentStatusEnum("status").default("detected").notNull(),
+    errorRate: text("error_rate"),
+    affectedServices: jsonb("affected_services"),
+    affectedApis: jsonb("affected_apis"),
+    affectedDbTables: jsonb("affected_db_tables"),
+    errorMessage: text("error_message"),
+    stackTrace: text("stack_trace"),
+    detectedAt: timestamp("detected_at").defaultNow().notNull(),
+    acknowledgedAt: timestamp("acknowledged_at"),
+    identifiedAt: timestamp("identified_at"),
+    resolvedAt: timestamp("resolved_at"),
+    closedAt: timestamp("closed_at"),
+    duration: integer("duration"),
+    relatedReleaseId: uuid("related_release_id").references(() => releases.id),
+    relatedDeploymentId: uuid("related_deployment_id").references(() => deploymentEvents.id),
+    rootCause: jsonb("root_cause"),
+    blastRadius: jsonb("blast_radius"),
+    timeline: jsonb("timeline"),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("incidents_org_idx").on(table.orgId),
+    index("incidents_severity_idx").on(table.severity),
+    index("incidents_status_idx").on(table.status),
+    index("incidents_detected_at_idx").on(table.detectedAt),
+  ]
+);
+
+// ── Incident Timeline Events ──────────────────────────────────────────
+export const incidentTimelines = pgTable(
+  "incident_timelines",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    incidentId: uuid("incident_id")
+      .notNull()
+      .references(() => incidents.id, { onDelete: "cascade" }),
+    timestamp: timestamp("timestamp").defaultNow().notNull(),
+    eventType: text("event_type").notNull(),
+    title: text("title").notNull(),
+    description: text("description"),
+    source: text("source"),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("incident_tl_incident_idx").on(table.incidentId),
+    index("incident_tl_timestamp_idx").on(table.timestamp),
+  ]
+);
+
+// ── Root Cause Analyses ───────────────────────────────────────────────
+export const rootCauseAnalyses = pgTable(
+  "root_cause_analyses",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    incidentId: uuid("incident_id")
+      .notNull()
+      .references(() => incidents.id, { onDelete: "cascade" }),
+    rootCauseType: text("root_cause_type").notNull(),
+    confidence: integer("confidence").notNull(),
+    evidence: jsonb("evidence"),
+    relatedPrId: uuid("related_pr_id").references(() => pullRequests.id),
+    relatedCommitId: uuid("related_commit_id").references(() => commits.id),
+    relatedDeploymentId: uuid("related_deployment_id").references(() => deploymentEvents.id),
+    description: text("description"),
+    aiAnalysis: jsonb("ai_analysis"),
+    isConfirmed: boolean("is_confirmed").default(false),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("rca_incident_idx").on(table.incidentId),
+    index("rca_confidence_idx").on(table.confidence),
+  ]
+);
+
+// ── Blast Radius ──────────────────────────────────────────────────────
+export const blastRadius = pgTable(
+  "blast_radius",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    incidentId: uuid("incident_id")
+      .notNull()
+      .references(() => incidents.id, { onDelete: "cascade" }),
+    entityType: text("entity_type").notNull(),
+    entityId: uuid("entity_id"),
+    entityName: text("entity_name").notNull(),
+    impactLevel: text("impact_level").notNull(),
+    description: text("description"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("blast_incident_idx").on(table.incidentId),
+    index("blast_level_idx").on(table.impactLevel),
+  ]
+);
+
+// ── Prevention Recommendations ────────────────────────────────────────
+export const preventionRecommendations = pgTable(
+  "prevention_recommendations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    incidentId: uuid("incident_id")
+      .notNull()
+      .references(() => incidents.id, { onDelete: "cascade" }),
+    category: text("category").notNull(),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    priority: integer("priority").default(0),
+    isImplemented: boolean("is_implemented").default(false),
+    implementedAt: timestamp("implemented_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("prev_rec_incident_idx").on(table.incidentId),
+  ]
+);
+
+// ── Engineering Knowledge Graph ────────────────────────────────────────
+export const engineeringEntities = pgTable(
+  "engineering_entities",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    entityType: entityTypeEnum("entity_type").notNull(),
+    entityId: uuid("entity_id"),
+    name: text("name").notNull(),
+    metadata: jsonb("metadata"),
+    riskLevel: text("risk_level"),
+    incidentCount: integer("incident_count").default(0),
+    lastDeployedAt: timestamp("last_deployed_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("eng_entities_org_idx").on(table.orgId),
+    index("eng_entities_type_idx").on(table.entityType),
+    uniqueIndex("eng_entities_type_id_unique").on(table.entityType, table.entityId),
+  ]
+);
+
+export const engineeringRelationships = pgTable(
+  "engineering_relationships",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    sourceEntityType: text("source_entity_type").notNull(),
+    sourceEntityId: uuid("source_entity_id").notNull(),
+    targetEntityType: text("target_entity_type").notNull(),
+    targetEntityId: uuid("target_entity_id").notNull(),
+    relationshipType: relationshipTypeEnum("relationship_type").notNull(),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("eng_rels_org_idx").on(table.orgId),
+    index("eng_rels_source_idx").on(table.sourceEntityType, table.sourceEntityId),
+    index("eng_rels_target_idx").on(table.targetEntityType, table.targetEntityId),
+    index("eng_rels_type_idx").on(table.relationshipType),
+  ]
+);

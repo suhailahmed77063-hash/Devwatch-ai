@@ -20,6 +20,9 @@ import {
   ChevronLeft,
   ChevronRight,
   Rocket,
+  Network,
+  Crosshair,
+  History,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -36,6 +39,9 @@ const navItems = [
   { label: "Reports", href: "/reports", icon: FileBarChart },
   { label: "AI Manager", href: "/ai-manager", icon: Bot },
   { label: "Releases", href: "/releases", icon: Rocket },
+  { label: "Incidents", href: "/incidents", icon: Shield },
+  { label: "Engineering Map", href: "/engineering-map", icon: Network },
+  { label: "Root Causes", href: "/root-causes", icon: Crosshair },
   { label: "Integrations", href: "/integrations", icon: Link2 },
   { label: "Settings", href: "/settings", icon: Settings },
 ];
