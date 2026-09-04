@@ -10,10 +10,10 @@
 
 | Where | URL |
 |---|---|
+| **🌐 Live (Vercel production)** | **https://aiforge-alpha.vercel.app** |
 | **Local preview (this machine)** | `http://localhost:58290` (dev server; pin with `npm run dev -- -p <port>`) |
-| **Vercel deployment** | **Add yours after deploy:** `https://<your-project>.vercel.app` — see [Deploy to Vercel](#-deploy-to-vercel) |
-| GitHub repo | `https://github.com/<your-user>/<your-repo>` — see [Push to GitHub](#-push-to-github) |
-| Health check | `/api/health` (also runs as a Vercel Cron every 6h) |
+| GitHub repo | https://github.com/suhailahmed77063-hash/aiforge |
+| Health check | `https://aiforge-alpha.vercel.app/api/health` (Vercel Cron daily) |
 
 ---
 
@@ -179,6 +179,11 @@ git push -u origin main
 # 3) (optional) create a fresh repo instead:
 #    gh repo create webforge-ai --public --source . --push
 ```
+
+> Live deployment notes: Neon Postgres is wired to the production env vars;
+> migrations run automatically during each Vercel build (`prisma migrate deploy`
+> in `vercel.json`). AI generation needs `OPENAI_API_KEY` in Vercel env vars to
+> go live.
 
 > The existing `origin` in this checkout points to `suhailahmed77063-hash/Devwatch-ai.git`.
 > It now contains the WebForge AI app (the old project's files were replaced). To publish
