@@ -14,6 +14,10 @@ export function getDb(): PrismaClient | null {
   if (!globalForPrisma.webforgePrisma) {
     globalForPrisma.webforgePrisma = new PrismaClient({
       log: process.env.NODE_ENV === "development" ? ["warn", "error"] : ["error"],
+      // Interactive transactions can span many sequential inserts when a
+      // template / generated site is materialized (pages + sections + nav).
+      // Serverless + Neon latency makes the 5s default too tight — allow 60s.
+      transactionOptions: { maxWait: 10_000, timeout: 60_000 },
     });
   }
   return globalForPrisma.webforgePrisma;

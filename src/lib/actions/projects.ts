@@ -5,6 +5,7 @@ import { requireUserOrThrow } from "@/lib/server/session";
 import { assertAccess } from "@/lib/server/access";
 import { requireDb } from "@/lib/server/db";
 import { slugify } from "@/lib/utils";
+import { logger } from "@/lib/server/logger";
 import { createProject, renameProject, setProjectStatus, deleteProject, duplicateProject } from "@/lib/server/data/projects";
 import { saveSchemaVersion } from "@/lib/server/data/versions";
 import { TEMPLATE_METAS, buildTemplateSite } from "@/lib/templates/catalog";
@@ -36,6 +37,7 @@ export async function createProjectAction(input: { name?: string; template?: str
     }
     return { ok: true, projectId };
   } catch (e) {
+    logger.error("project.create_failed", { error: e instanceof Error ? e.stack ?? e.message : String(e), template: input.template ?? null, name: (input.name ?? "").slice(0, 60) });
     return { ok: false, error: toastError(e) };
   }
 }

@@ -17,6 +17,9 @@ next-env.d.ts
 # AI app-builder sandbox workspaces (real generated projects, never committed)
 workspaces/
 
+# nested DevWatch clone kept beside the app for reference
+/devwatch-original/
+
 # preview run logs & local agent state
 .freebuff/
 
@@ -32,3 +35,6 @@ yarn-error.log*
 
 # local storage provider output
 /storage/
+
+.vercel
+.env*
