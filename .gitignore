@@ -1,0 +1,34 @@
+# deps
+/node_modules
+
+# next.js
+/.next/
+/out/
+next-env.d.ts
+
+# production
+/build
+
+# env
+.env
+.env.local
+.env*.local
+
+# AI app-builder sandbox workspaces (real generated projects, never committed)
+workspaces/
+
+# preview run logs & local agent state
+.freebuff/
+
+# misc
+.DS_Store
+*.pem
+*.tsbuildinfo
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# local storage provider output
+/storage/

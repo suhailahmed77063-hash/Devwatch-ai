@@ -1,0 +1,30 @@
+version: "3.9"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: webforge-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: webforge
+      POSTGRES_PASSWORD: webforge
+      POSTGRES_DB: webforge
+    ports:
+      - "5432:5432"
+    volumes:
+      - webforge_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U webforge"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: webforge-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+
+volumes:
+  webforge_pg:
