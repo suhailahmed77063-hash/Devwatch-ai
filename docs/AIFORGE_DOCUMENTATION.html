@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AIForge - Complete Documentation</title>
+    <style>
+        @page {
+            size: A4;
+            margin: 20mm;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 900px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        h1 {
+            color: #e11d48;
+            border-bottom: 3px solid #e11d48;
+            padding-bottom: 10px;
+            page-break-after: avoid;
+        }
+        h2 {
+            color: #1f2937;
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 8px;
+            margin-top: 40px;
+            page-break-after: avoid;
+        }
+        h3 {
+            color: #374151;
+            margin-top: 30px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            page-break-inside: avoid;
+        }
+        th, td {
+            border: 1px solid #e5e7eb;
+            padding: 12px;
+            text-align: left;
+        }
+        th {
+            background-color: #f9fafb;
+            font-weight: 600;
+            color: #1f2937;
+        }
+        tr:nth-child(even) {
+            background-color: #f9fafb;
+        }
+        code {
+            background-color: #f3f4f6;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 14px;
+        }
+        pre {
+            background-color: #1f2937;
+            color: #e5e7eb;
+            padding: 16px;
+            border-radius: 8px;
+            overflow-x: auto;
+            page-break-inside: avoid;
+        }
+        pre code {
+            background-color: transparent;
+            color: inherit;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .badge-free { background-color: #dbeafe; color: #1e40af; }
+        .badge-pro { background-color: #fef3c7; color: #92400e; }
+        .badge-enterprise { background-color: #d1fae5; color: #065f46; }
+        .feature-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .feature-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 16px;
+            background-color: #f9fafb;
+        }
+        .feature-card h4 {
+            margin: 0 0 8px 0;
+            color: #1f2937;
+        }
+        .feature-card p {
+            margin: 0;
+            color: #6b7280;
+            font-size: 14px;
+        }
+        .warning {
+            background-color: #fef3c7;
+            border-left: 4px solid #f59e0b;
+            padding: 12px 16px;
+            margin: 20px 0;
+            border-radius: 0 4px 4px 0;
+        }
+        .info {
+            background-color: #dbeafe;
+            border-left: 4px solid #3b82f6;
+            padding: 12px 16px;
+            margin: 20px 0;
+            border-radius: 0 4px 4px 0;
+        }
+        .success {
+            background-color: #d1fae5;
+            border-left: 4px solid #10b981;
+            padding: 12px 16px;
+            margin: 20px 0;
+            border-radius: 0 4px 4px 0;
+        }
+        .logo {
+            text-align: center;
+            margin: 40px 0;
+        }
+        .logo h1 {
+            font-size: 48px;
+            border: none;
+            margin: 0;
+        }
+        .toc {
+            background-color: #f9fafb;
+            padding: 20px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+        .toc ul {
+            list-style: none;
+            padding-left: 0;
+        }
+        .toc li {
+            margin: 8px 0;
+        }
+        .toc a {
+            color: #e11d48;
+            text-decoration: none;
+        }
+        .toc a:hover {
+            text-decoration: underline;
+        }
+        @media print {
+            body {
+                padding: 0;
+            }
+            .no-print {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="logo">
+        <h1>🔧 AIForge</h1>
+        <p style="font-size: 24px; color: #6b7280;">AI-Powered Website & App Builder</p>
+        <p style="color: #9ca3af;">Complete Documentation v1.0</p>
+    </div>
+
+    <div class="toc">
+        <h2>📋 Table of Contents</h2>
+        <ul>
+            <li><a href="#overview">1. Overview</a></li>
+            <li><a href="#features">2. Features</a></li>
+            <li><a href="#tech-stack">3. Tech Stack</a></li>
+            <li><a href="#getting-started">4. Getting Started</a></li>
+            <li><a href="#authentication">5. Authentication</a></li>
+            <li><a href="#ai-website-builder">6. AI Website Builder</a></li>
+            <li><a href="#ai-app-builder">7. AI App Builder</a></li>
+            <li><a href="#studio-editor">8. Studio Editor</a></li>
+            <li><a href="#deployment">9. Deployment</a></li>
+            <li><a href="#credit-system">10. Credit System</a></li>
+            <li><a href="#api-reference">11. API Reference</a></li>
+            <li><a href="#environment-variables">12. Environment Variables</a></li>
+            <li><a href="#database-schema">13. Database Schema</a></li>
+            <li><a href="#troubleshooting">14. Troubleshooting</a></li>
+        </ul>
+    </div>
+
+    <h1 id="overview">1. Overview</h1>
+    
+    <p>AIForge is a full-stack AI-powered website and application builder SaaS platform that enables users to create production-ready websites and web applications using natural language prompts.</p>
+
+    <div class="feature-grid">
+        <div class="feature-card">
+            <h4>🤖 AI Website Generation</h4>
+            <p>Create multi-page websites from text prompts with sections, SEO, and responsive design.</p>
+        </div>
+        <div class="feature-card">
+            <h4>🛠️ AI App Builder</h4>
+            <p>Generate full-stack TypeScript applications with Express, React, Prisma, and JWT auth.</p>
+        </div>
+        <div class="feature-card">
+            <h4>🎨 Visual Editor</h4>
+            <p>Real-time website editing with live preview and AI assistant.</p>
+        </div>
+        <div class="feature-card">
+            <h4>🚀 Auto-Deploy</h4>
+            <p>Automatic deployment to production with live URL.</p>
+        </div>
+    </div>
+
+    <h1 id="features">2. Features</h1>
+
+    <h2>🤖 AI Website Builder</h2>
+    <table>
+        <tr><th>Feature</th><th>Description</th></tr>
+        <tr><td>Prompt-to-Website</td><td>Describe your idea, AI generates complete website</td></tr>
+        <tr><td>Multi-Page Support</td><td>Generate multiple pages (home, about, pricing, etc.)</td></tr>
+        <tr><td>Section Types</td><td>Hero, Features, Pricing, Testimonials, FAQ, Contact, CTA</td></tr>
+        <tr><td>SEO Optimization</td><td>Auto-generated meta tags, Open Graph, JSON-LD</td></tr>
+        <tr><td>Responsive Design</td><td>Mobile, tablet, desktop breakpoints</td></tr>
+        <tr><td>AI Image Generation</td><td>Optional AI-generated images for galleries</td></tr>
+    </table>
+
+    <h2>🛠️ AI App Builder</h2>
+    <table>
+        <tr><th>Feature</th><th>Description</th></tr>
+        <tr><td>Full-Stack Generation</td><td>Backend (Express) + Frontend (React) + Database (Prisma)</td></tr>
+        <tr><td>Authentication</td><td>JWT-based auth with login/register</td></tr>
+        <tr><td>Database Schema</td><td>Auto-generated Prisma schema</td></tr>
+        <tr><td>API Routes</td><td>REST endpoints with validation</td></tr>
+        <tr><td>React Components</td><td>UI components with Tailwind CSS</td></tr>
+        <tr><td>Unit Tests</td><td>Vitest test generation</td></tr>
+        <tr><td>Auto-Fix Loop</td><td>AI fixes failing tests (up to 3 attempts)</td></tr>
+        <tr><td>Auto-Deploy</td><td>Automatic deployment after successful generation</td></tr>
+    </table>
+
+    <h2>🎨 Visual Editor (Studio)</h2>
+    <table>
+        <tr><th>Feature</th><th>Description</th></tr>
+        <tr><td>Live Preview</td><td>Real-time website preview</td></tr>
+        <tr><td>Section Inspector</td><td>Edit section properties (text, colors, layout)</td></tr>
+        <tr><td>Undo/Redo</td><td>Full history with keyboard shortcuts</td></tr>
+        <tr><td>Device Preview</td><td>Desktop, tablet, mobile views</td></tr>
+        <tr><td>Chat Panel</td><td>AI assistant for modifications</td></tr>
+    </table>
+
+    <h2>💻 Code Editor</h2>
+    <table>
+        <tr><th>Feature</th><th>Description</th></tr>
+        <tr><td>Syntax Highlighting</td><td>TypeScript, JavaScript, JSON, HTML, CSS</td></tr>
+        <tr><td>File Explorer</td><td>Browse and manage generated files</td></tr>
+        <tr><td>Inline Editing</td><td>Edit files directly in browser</td></tr>
+        <tr><td>Save Changes</td><td>Manual save with Ctrl+S</td></tr>
+    </table>
+
+    <h2>🚀 Deployment</h2>
+    <table>
+        <tr><th>Feature</th><th>Description</th></tr>
+        <tr><td>One-Click Publish</td><td>Deploy with single button</td></tr>
+        <tr><td>Auto-Deploy</td><td>Automatic deployment after generation</td></tr>
+        <tr><td>Custom Domains</td><td>Bring your own domain (Pro)</td></tr>
+        <tr><td>SSL/CDN</td><td>Automatic HTTPS and edge caching</td></tr>
+        <tr><td>Deployment History</td><td>View past deployments</td></tr>
+        <tr><td>Rollback</td><td>Restore previous versions</td></tr>
+    </table>
+
+    <h1 id="tech-stack">3. Tech Stack</h1>
+
+    <table>
+        <tr><th>Layer</th><th>Technology</th></tr>
+        <tr><td>Frontend</td><td>Next.js 15, React 19, Tailwind CSS 4, Zustand</td></tr>
+        <tr><td>Backend</td><td>Node.js, Express.js, Prisma 6</td></tr>
+        <tr><td>Database</td><td>PostgreSQL (Neon)</td></tr>
+        <tr><td>Authentication</td><td>NextAuth 5, JWT, bcrypt</td></tr>
+        <tr><td>AI Provider</td><td>OpenAI API (gpt-4o, gpt-4o-mini)</td></tr>
+        <tr><td>Hosting</td><td>Vercel</td></tr>
+        <tr><td>Code Editor</td><td>CodeMirror</td></tr>
+        <tr><td>Animations</td><td>Framer Motion</td></tr>
+    </table>
+
+    <h1 id="getting-started">4. Getting Started</h1>
+
+    <h2>Prerequisites</h2>
+    <ul>
+        <li>Node.js 18+</li>
+        <li>npm or yarn</li>
+        <li>PostgreSQL database (or Neon)</li>
+        <li>OpenAI API key</li>
+    </ul>
+
+    <h2>Installation</h2>
+    <pre><code># Clone the repository
+git clone https://github.com/your-username/aiforge.git
+cd aiforge
+
+# Install dependencies
+npm install
+
+# Set up environment variables
+cp .env.example .env.local
+# Edit .env.local with your configuration
+
+# Generate Prisma client
+npx prisma generate
+
+# Run database migrations
+npx prisma migrate dev
+
+# Start development server
+npm run dev</code></pre>
+
+    <h1 id="authentication">5. Authentication</h1>
+
+    <h2>Supported Methods</h2>
+    <table>
+        <tr><th>Method</th><th>Description</th></tr>
+        <tr><td>Email/Password</td><td>Traditional authentication with bcrypt hashing</td></tr>
+        <tr><td>Google OAuth</td><td>Sign in with Google account</td></tr>
+        <tr><td>GitHub OAuth</td><td>Sign in with GitHub account</td></tr>
+    </table>
+
+    <h2>API Endpoints</h2>
+    <table>
+        <tr><th>Method</th><th>Endpoint</th><th>Description</th></tr>
+        <tr><td>POST</td><td>/api/auth/register</td><td>Register new user</td></tr>
+        <tr><td>POST</td><td>/api/auth/login</td><td>Login user</td></tr>
+        <tr><td>POST</td><td>/api/auth/logout</td><td>Logout user</td></tr>
+        <tr><td>GET</td><td>/api/auth/session</td><td>Get current session</td></tr>
+    </table>
+
+    <h1 id="ai-website-builder">6. AI Website Builder</h1>
+
+    <h2>Example Prompts</h2>
+    <pre><code>"Build a landing page for a coffee subscription startup called BrewBox"
+"Create a SaaS pricing page with 3 tiers"
+"Make a restaurant website with menu, reservations, and contact"
+"Design a portfolio for a freelance designer"</code></pre>
+
+    <h2>Generated Sections</h2>
+    <table>
+        <tr><th>Section</th><th>Description</th></tr>
+        <tr><td>Hero</td><td>Main banner with headline and CTA</td></tr>
+        <tr><td>Features</td><td>Grid of feature cards</td></tr>
+        <tr><td>Pricing</td><td>Pricing table with tiers</td></tr>
+        <tr><td>Testimonials</td><td>Customer reviews</td></tr>
+        <tr><td>FAQ</td><td>Accordion FAQ section</td></tr>
+        <tr><td>Contact</td><td>Contact form or info</td></tr>
+        <tr><td>CTA</td><td>Call-to-action banner</td></tr>
+        <tr><td>Gallery</td><td>Image grid</td></tr>
+    </table>
+
+    <h1 id="ai-app-builder">7. AI App Builder</h1>
+
+    <h2>Example Prompts</h2>
+    <pre><code>"Build a todo app with user authentication and PostgreSQL database"
+"Create a blog platform with posts, comments, and user profiles"
+"Make an e-commerce store with cart, checkout, and order history"
+"Design a project management tool with tasks, teams, and deadlines"</code></pre>
+
+    <h2>Automated QA Pipeline</h2>
+    <table>
+        <tr><th>Step</th><th>Tool</th><th>Description</th></tr>
+        <tr><td>1. Install</td><td>npm</td><td>Install dependencies</td></tr>
+        <tr><td>2. Type Check</td><td>tsc --noEmit</td><td>TypeScript validation</td></tr>
+        <tr><td>3. Lint</td><td>tsc --noUnusedLocals</td><td>Code quality</td></tr>
+        <tr><td>4. Unit Tests</td><td>vitest run</td><td>Test execution</td></tr>
+        <tr><td>5. Build</td><td>tsc</td><td>Production build</td></tr>
+        <tr><td>6. Security</td><td>Custom scanner</td><td>Vulnerability check</td></tr>
+        <tr><td>7. Runtime</td><td>Node.js</td><td>Health check</td></tr>
+    </table>
+
+    <h1 id="credit-system">8. Credit System</h1>
+
+    <h2>Plan Comparison</h2>
+    <table>
+        <tr><th>Resource</th><th><span class="badge badge-free">Free</span></th><th><span class="badge badge-pro">Pro ($24/mo)</span></th><th><span class="badge badge-enterprise">Enterprise</span></th></tr>
+        <tr><td>Website Generations</td><td>3/month</td><td>Unlimited</td><td>Unlimited</td></tr>
+        <tr><td>App Generations</td><td>1/month</td><td>Unlimited</td><td>Unlimited</td></tr>
+        <tr><td>Published Sites</td><td>1</td><td>10</td><td>Unlimited</td></tr>
+        <tr><td>Custom Domains</td><td>0</td><td>10</td><td>Unlimited</td></tr>
+        <tr><td>AI Images</td><td>❌</td><td>✓</td><td>✓</td></tr>
+        <tr><td>Code Export</td><td>❌</td><td>✓</td><td>✓</td></tr>
+    </table>
+
+    <h1 id="troubleshooting">9. Troubleshooting</h1>
+
+    <div class="warning">
+        <strong>⚠️ "AI service is temporarily unavailable"</strong><br>
+        Cause: OpenAI API error (usually 400 or 500)<br>
+        Solution: Check OPENAI_API_KEY, verify model availability, check API quota
+    </div>
+
+    <div class="warning">
+        <strong>⚠️ "DATABASE_URL is not configured"</strong><br>
+        Cause: Missing database connection<br>
+        Solution: Create Neon PostgreSQL database, add DATABASE_URL to Vercel env vars
+    </div>
+
+    <div class="info">
+        <strong>ℹ️ Health Check</strong><br>
+        <code>curl https://aiforge-alpha.vercel.app/api/health</code><br>
+        Expected: <code>{"status":"ok","checks":{"database":"reachable","ai":"configured"}}</code>
+    </div>
+
+    <div class="success">
+        <strong>✅ Deployment Successful</strong><br>
+        Your app is live at: <code>https://aiforge-alpha.vercel.app</code>
+    </div>
+
+    <hr style="margin-top: 60px;">
+    <p style="text-align: center; color: #9ca3af;">
+        AIForge Documentation v1.0 | Last updated: September 5, 2026<br>
+        © 2026 AIForge. All rights reserved.
+    </p>
+</body>
+</html>
