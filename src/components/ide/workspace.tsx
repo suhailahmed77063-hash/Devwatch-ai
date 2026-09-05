@@ -12,6 +12,7 @@ import { MonacoEditor } from "./monaco-editor";
 import { FileExplorer } from "./file-explorer";
 import { IntegratedTerminal } from "./terminal";
 import { LivePreview } from "./live-preview";
+import { VersionHistory } from "./version-history";
 
 interface FileItem {
   path: string;
@@ -45,7 +46,7 @@ export function IdeWorkspace({ projectId, canEdit }: { projectId: string; canEdi
 
   // UI state
   const [leftPanel, setLeftPanel] = useState<"files" | "agent">("files");
-  const [rightPanel, setRightPanel] = useState<"terminal" | "preview">("terminal");
+  const [rightPanel, setRightPanel] = useState<"terminal" | "preview" | "history">("terminal");
   const [rightOpen, setRightOpen] = useState(true);
 
   // Preview state
@@ -170,6 +171,9 @@ export function IdeWorkspace({ projectId, canEdit }: { projectId: string; canEdi
             case "reply":
               setAgentActivity((prev) => [...prev, `✅ ${d.text}`]);
               toast(String(d.text), "success");
+              break;
+            case "checkpoint":
+              setAgentActivity((prev) => [...prev, `💾 Checkpoint v${d.version}: ${d.message}`]);
               break;
             case "error":
               setAgentActivity((prev) => [...prev, `❌ ${d.message}`]);
@@ -334,12 +338,23 @@ export function IdeWorkspace({ projectId, canEdit }: { projectId: string; canEdi
               >
                 <Globe className="w-3 h-3" /> Preview
               </button>
+              <button
+                onClick={() => setRightPanel("history")}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-1.5 text-[10px] font-medium h-full transition",
+                  rightPanel === "history" ? "text-white border-b-2 border-acc" : "text-zinc-500 hover:text-zinc-300"
+                )}
+              >
+                History
+              </button>
             </div>
 
             {rightPanel === "terminal" ? (
               <IntegratedTerminal projectId={projectId} />
-            ) : (
+            ) : rightPanel === "preview" ? (
               <LivePreview projectId={projectId} url={previewUrl} status={previewStatus} />
+            ) : (
+              <VersionHistory projectId={projectId} />
             )}
           </div>
         )}
