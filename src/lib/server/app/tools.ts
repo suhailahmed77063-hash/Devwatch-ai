@@ -158,23 +158,36 @@ registerTool({
 
 registerTool({
   name: "terminal_execute",
-  description: "Execute a shell command in the project directory",
+  description: "Execute a shell command in an isolated sandbox",
   inputSchema: {
     command: { type: "string", description: "Shell command to execute", required: true },
     timeout: { type: "number", description: "Timeout in seconds (default: 60)" },
   },
   execute: async (input, ctx) => {
     try {
-      const timeout = ((input.timeout as number) || 60) * 1000;
-      const parts = (input.command as string).split(/\s+/);
-      const cmd = parts[0];
-      const args = parts.slice(1);
-      const result = await runCommand(ctx.workingDir, cmd, args, timeout);
+      // Use sandbox execution for safety
+      const { createSandbox, copyFilesToSandbox, executeInSandbox, destroySandbox } = await import("../sandbox/manager");
+      const { readAppFiles } = await import("./data");
+      
+      const sandbox = await createSandbox(ctx.projectId);
+      const files = await readAppFiles(ctx.projectId);
+      await copyFilesToSandbox(sandbox.id, files);
+      
+      const timeoutMs = ((input.timeout as number) || 60) * 1000;
+      const result = await executeInSandbox(
+        sandbox.id,
+        input.command as string,
+        [],
+        { timeoutMs }
+      );
+      
+      await destroySandbox(sandbox.id);
+      
       const output = [result.stdout, result.stderr].filter(Boolean).join("\n");
       return {
-        success: result.code === 0,
-        output: output.slice(0, 10000) || (result.code === 0 ? "Command completed successfully" : "Command failed"),
-        error: result.code !== 0 ? `Exit code: ${result.code}` : undefined,
+        success: result.exitCode === 0,
+        output: output.slice(0, 10000) || (result.exitCode === 0 ? "Command completed successfully" : "Command failed"),
+        error: result.exitCode !== 0 ? `Exit code: ${result.exitCode}${result.timedOut ? " (timeout)" : ""}` : undefined,
       };
     } catch (e) {
       return { success: false, output: "", error: (e as Error).message };
