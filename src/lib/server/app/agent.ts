@@ -18,6 +18,7 @@ import { runPipeline } from "./runner";
 import { gitCommit } from "./workspace";
 import { hasRealFiles, workspaceDir } from "./templates";
 import { assertNotCancelled, clearCancel, isCancelled } from "./cancel";
+import { runDeployment } from "../deploy/run";
 
 export type AppEvent =
   | { type: "stage"; label: string }
@@ -97,7 +98,7 @@ async function verifyAndFix(input: AgentInput, kind: RunKind): Promise<{ result:
   while (!result.passed && fixIterations < MAX_FIX_ATTEMPTS && !isCancelled(input.runId)) {
     fixIterations++;
     assertNotCancelled(input.runId);
-    input.emit({ type: "stage", label: `Fixing failures (attempt ${fixIterations}/${MAX_FIX_ATTEMPTS})…` });
+    input.emit({ type: "stage", label: `Fixing failures (attempt ${fixIterations}/${MAX_FIX_ATTEMPTS})...` });
     const files = await readAppFiles(input.project.id);
     const failing = result.steps.filter((s) => s.status === "fail" || s.status === "warn");
     let fix;
@@ -160,7 +161,7 @@ export async function runGenerateApp(input: AgentInput & { prompt: string }): Pr
 
   try {
     // 1. Blueprint
-    input.emit({ type: "stage", label: "Analyzing requirements…" });
+    input.emit({ type: "stage", label: "Analyzing requirements..." });
     const bp = await structured(() => getAgentLLM(input.project), {
       label: "app blueprint",
       schema: blueprintSchema,
@@ -168,7 +169,7 @@ export async function runGenerateApp(input: AgentInput & { prompt: string }): Pr
     });
     tokensIn += bp.tokensIn;
     tokensOut += bp.tokensOut;
-    input.emit({ type: "stage", label: `Planning ${bp.data.name}…` });
+    input.emit({ type: "stage", label: `Planning ${bp.data.name}...` });
     input.emit({
       type: "plan",
       steps: [
@@ -179,11 +180,12 @@ export async function runGenerateApp(input: AgentInput & { prompt: string }): Pr
         "Write source files",
         "Write tests",
         "Run automated QA",
+        "Auto-deploy to production",
       ],
     });
 
     // 2. Files
-    input.emit({ type: "stage", label: "Writing application files…" });
+    input.emit({ type: "stage", label: "Writing application files..." });
     const filesRes = await structured(() => getAgentLLM(input.project), {
       label: "app files",
       schema: appFilesSchema,
@@ -198,17 +200,41 @@ export async function runGenerateApp(input: AgentInput & { prompt: string }): Pr
     for (const l of labels) input.emit({ type: "op", label: l });
 
     // 3. Automated QA + fix loop
-    input.emit({ type: "stage", label: "Running automated tests…" });
+    input.emit({ type: "stage", label: "Running automated tests..." });
     const { result } = await verifyAndFix(input, "generate");
 
     // 4. Checkpoint + git commit (traceability)
-    input.emit({ type: "stage", label: "Saving checkpoint…" });
+    input.emit({ type: "stage", label: "Saving checkpoint..." });
     const commitHash = await gitCommit(workspaceDir(input.project.id), `AI generate: ${bp.data.name} — ${filesRes.data.summary.slice(0, 80)}`);
-    const cp = await createCheckpoint(input.project.id, `Generated “${bp.data.name}” — ${filesRes.data.summary}`, input.actor.id, commitHash ?? undefined);
-    input.emit({ type: "checkpoint", version: cp.version, message: `Generated “${bp.data.name}”` });
+    const cp = await createCheckpoint(input.project.id, `Generated "${bp.data.name}" — ${filesRes.data.summary}`, input.actor.id, commitHash ?? undefined);
+    input.emit({ type: "checkpoint", version: cp.version, message: `Generated "${bp.data.name}"` });
 
     const passed = result.passed;
-    const summary = `${passed ? "✅" : "⚠️"} Generated “${bp.data.name}” — ${Object.keys(filesRes.data.files).length} files, ${result.steps.filter((s) => s.status === "pass").length}/${result.steps.length} checks passed${passed ? "." : ". Fixes may be needed — see the run panel."}`;
+    let deployUrl: string | null = null;
+
+    // 5. Auto-deploy if generation passed
+    if (passed) {
+      try {
+        input.emit({ type: "stage", label: "Deploying your app to production..." });
+        const project = await db.project.findUnique({ where: { id: input.project.id } });
+        if (project) {
+          const deployResult = await runDeployment({
+            project,
+            actor: input.actor,
+            message: `Auto-deploy: ${bp.data.name}`,
+          });
+          deployUrl = deployResult.url;
+          if (deployUrl) {
+            input.emit({ type: "reply", text: `🚀 Your app is LIVE at ${deployUrl}` });
+          }
+        }
+      } catch (e) {
+        logger.warn("app.generate.auto_deploy_failed", { projectId: input.project.id, error: e instanceof Error ? e.message : String(e) });
+        input.emit({ type: "reply", text: "⚠️ App generated but auto-deploy failed. You can deploy manually from the Deploy button." });
+      }
+    }
+
+    const summary = `${passed ? "✅" : "⚠️"} Generated "${bp.data.name}" — ${Object.keys(filesRes.data.files).length} files, ${result.steps.filter((s) => s.status === "pass").length}/${result.steps.length} checks passed${deployUrl ? ` · 🚀 Live at ${deployUrl}` : ""}`;
 
     await db.generation.update({
       where: { id: generation.id },
@@ -216,10 +242,10 @@ export async function runGenerateApp(input: AgentInput & { prompt: string }): Pr
         status: passed ? "COMPLETED" : "FAILED",
         finishedAt: new Date(),
         tokensIn, tokensOut,
-        result: { app: true, name: bp.data.name, modules: bp.data.modules, files: filesRes.data.files.length, passed, securityScore: securityScoreFrom(result) },
+        result: { app: true, name: bp.data.name, modules: bp.data.modules, files: filesRes.data.files.length, passed, securityScore: securityScoreFrom(result), deployUrl },
       },
     });
-    await logAudit({ actorId: input.actor.id, projectId: input.project.id, action: "app.generate", entity: "AppRun", entityId: input.runId, meta: { name: bp.data.name, passed, tokensIn, tokensOut } });
+    await logAudit({ actorId: input.actor.id, projectId: input.project.id, action: "app.generate", entity: "AppRun", entityId: input.runId, meta: { name: bp.data.name, passed, tokensIn, tokensOut, deployUrl } });
     input.emit({ type: "reply", text: summary });
   } catch (e) {
     logger.error("app.generate.failed", { projectId: input.project.id, error: e instanceof Error ? e.message : String(e) });
@@ -258,7 +284,7 @@ export async function runCodingAgent(input: AgentInput & { message: string }): P
     const historyCtx = compactHistory(input.history ?? []);
 
     // 1. Analyze + plan
-    input.emit({ type: "stage", label: "Analyzing request…" });
+    input.emit({ type: "stage", label: "Analyzing request..." });
     const plan = await structured(() => getAgentLLM(input.project), {
       label: "agent plan",
       schema: appPlanSchema,
@@ -266,7 +292,7 @@ export async function runCodingAgent(input: AgentInput & { message: string }): P
     });
     await recordUsage({ userId: input.actor.id, kind: "AI_TOKENS", amount: plan.tokensIn + plan.tokensOut }).catch(() => {});
     input.emit({ type: "plan", steps: plan.data.steps });
-    input.emit({ type: "stage", label: "Planning changes…" });
+    input.emit({ type: "stage", label: "Planning changes..." });
 
     const ops = validateOps(plan.data.operations);
     if (!ops.length) {
@@ -275,13 +301,13 @@ export async function runCodingAgent(input: AgentInput & { message: string }): P
     }
 
     // 2. Apply
-    input.emit({ type: "stage", label: "Applying changes…" });
+    input.emit({ type: "stage", label: "Applying changes..." });
     const labels = await applyFileOps(input.project.id, ops, input.actor.id);
     for (const l of labels) input.emit({ type: "op", label: l });
 
     // 3. Verify (+ fix loop)
     if (plan.data.runTests) {
-      input.emit({ type: "stage", label: "Running automated tests…" });
+      input.emit({ type: "stage", label: "Running automated tests..." });
       const { result } = await verifyAndFix(input, "agent");
       const passed = result.passed;
       const count = result.steps.filter((s) => s.status === "pass").length;
@@ -294,7 +320,7 @@ export async function runCodingAgent(input: AgentInput & { message: string }): P
     }
 
     // 4. Checkpoint + git commit
-    input.emit({ type: "stage", label: "Saving checkpoint…" });
+    input.emit({ type: "stage", label: "Saving checkpoint..." });
     const commitHash = await gitCommit(workspaceDir(input.project.id), `AI edit: ${message.slice(0, 80)}`);
     const cp = await createCheckpoint(input.project.id, `AI edit: ${message.slice(0, 140)}`, input.actor.id, commitHash ?? undefined);
     input.emit({ type: "checkpoint", version: cp.version, message: `AI edit: ${message.slice(0, 80)}` });
@@ -322,12 +348,12 @@ function securityScoreFrom(result: PipelineResult): number {
   return m ? Number(m[1]) : 0;
 }
 
-/** Manual “Test & Fix Everything” run — full QA pipeline + AI fix loop. */
+/** Manual "Test & Fix Everything" run — full QA pipeline + AI fix loop. */
 export async function runFullQa(input: AgentInput): Promise<void> {
   const startedAt = Date.now();
   try {
     await ensureAppWorkspace(input.project.id);
-    input.emit({ type: "stage", label: "Verifying workspace…" });
+    input.emit({ type: "stage", label: "Verifying workspace..." });
     const { result } = await verifyAndFix(input, "full");
     const passed = result.passed;
     const count = result.steps.filter((s) => s.status === "pass").length;
