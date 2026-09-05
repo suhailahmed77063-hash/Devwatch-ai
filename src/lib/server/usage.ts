@@ -55,9 +55,10 @@ export async function assertPlanAllowed(kind: UsageKind, ctx: LimitContext): Pro
   if (kind === "AI_GENERATION") {
     const n = limits.aiGenerationsPerMonth;
     if (n === 0) throw new UpgradeRequiredError("AI generation is a Pro feature. Upgrade to unlock unlimited AI generations.");
+    // -1 means unlimited, no check needed
     if (n > 0) {
       const used = (await usageOf(ctx.user.id))[kind] ?? 0;
-      if (used >= n) throw new UsageLimitError("You've used all 3 free website generations this month. Upgrade to Pro for unlimited generations.");
+      if (used >= n) throw new UsageLimitError();
     }
     return;
   }
@@ -65,9 +66,10 @@ export async function assertPlanAllowed(kind: UsageKind, ctx: LimitContext): Pro
   if (kind === "APP_GENERATION") {
     const n = limits.appGenerationsPerMonth;
     if (n === 0) throw new UpgradeRequiredError("AI app builder is a Pro feature. Upgrade to unlock app generation.");
+    // -1 means unlimited, no check needed
     if (n > 0) {
       const used = (await usageOf(ctx.user.id))["APP_GENERATION"] ?? 0;
-      if (used >= n) throw new UsageLimitError("You've used your 1 free app generation. Upgrade to Pro for unlimited app generation.");
+      if (used >= n) throw new UsageLimitError();
     }
     return;
   }
@@ -85,18 +87,17 @@ export async function assertPlanAllowed(kind: UsageKind, ctx: LimitContext): Pro
   if (kind === "DEPLOYMENT") {
     const published = limits.publishedProjects;
     if (published === 0) throw new UpgradeRequiredError("Publishing is a Pro feature.");
+    // -1 means unlimited, no check needed
     if (published > 0 && ctx.projectId) {
       const db = requireDb();
-      // count published deployments across *distinct* projects the user owns
       const deployments = await db.deployment.findMany({
         where: { status: "READY", isPublished: true, project: { ownerId: ctx.user.id } },
         select: { projectId: true },
       });
       const distinct = new Set(deployments.map((d) => d.projectId));
-      // current project counts if it isn't already in the set and it will be published
       const willCount = ctx.projectId && !distinct.has(ctx.projectId) ? 1 : 0;
       if (distinct.size + willCount > published) {
-        throw new UsageLimitError(`You've reached the ${plan === "FREE" ? "1" : "10"} published project${published === 1 ? "" : "s"} limit on ${plan}.`);
+        throw new UsageLimitError();
       }
     }
     return;

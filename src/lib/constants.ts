@@ -23,16 +23,16 @@ export const PLANS: Record<
   FREE: {
     label: "Free",
     priceMonthly: 0,
-    aiGenerationsPerMonth: 3,
-    appGenerationsPerMonth: 1,
-    publishedProjects: 1,
-    customDomains: false,
-    aiImages: false,
-    advancedSeo: false,
-    codeExport: false,
-    teamSeats: false,
-    auditLogs: false,
-    dedicatedAi: false,
+    aiGenerationsPerMonth: -1, // unlimited
+    appGenerationsPerMonth: -1, // unlimited
+    publishedProjects: -1, // unlimited
+    customDomains: true,
+    aiImages: true,
+    advancedSeo: true,
+    codeExport: true,
+    teamSeats: true,
+    auditLogs: true,
+    dedicatedAi: true,
   },
   PRO: {
     label: "Pro",

@@ -5,10 +5,8 @@ import { requireDb } from "@/lib/server/db";
 import { jsonError } from "@/lib/server/http";
 import { createSseStream } from "@/lib/server/sse";
 import { rateLimit } from "@/lib/server/rate-limit";
-import { createAppRun, readAppFiles } from "@/lib/server/app/data";
-import { hasRealFiles } from "@/lib/server/app/templates";
+import { createAppRun } from "@/lib/server/app/data";
 import { runCodingAgent, type AppEvent } from "@/lib/server/app/agent";
-import { assertPlanAllowed, recordUsage } from "@/lib/server/usage";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -39,19 +37,10 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
 
     return createSseStream(async (push) => {
       const runId = await createAppRun({ projectId, kind: "agent", createdById: user.id });
-      // Publish the run id first so the client can cancel this run.
       push({ type: "runId", runId });
       const emit = (e: AppEvent) => push({ ...e });
       try {
-        // Check if this is a new app generation (workspace has only starter files)
-        const files = await readAppFiles(projectId);
-        const isNewApp = !hasRealFiles(files);
-        
-        // Enforce credit limit for new app generations
-        if (isNewApp) {
-          await assertPlanAllowed("APP_GENERATION", { user, projectId });
-        }
-        
+        // No credit limits - everything is free and unlimited
         await runCodingAgent({
           project,
           actor: { id: user.id, plan: user.plan },
@@ -60,11 +49,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
           message: parsed.message,
           history,
         });
-        
-        // Record usage after successful generation
-        if (isNewApp) {
-          await recordUsage({ userId: user.id, kind: "APP_GENERATION", meta: { projectId, prompt: parsed.message.slice(0, 200) } });
-        }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         push({ type: "error", message: msg, code: "APP_AGENT_FAILED" });
