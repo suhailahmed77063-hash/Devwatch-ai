@@ -9,6 +9,7 @@ export const PLANS: Record<
     label: string;
     priceMonthly: number | null;
     aiGenerationsPerMonth: number;
+    appGenerationsPerMonth: number;
     publishedProjects: number;
     customDomains: boolean;
     aiImages: boolean;
@@ -23,6 +24,7 @@ export const PLANS: Record<
     label: "Free",
     priceMonthly: 0,
     aiGenerationsPerMonth: 3,
+    appGenerationsPerMonth: 1,
     publishedProjects: 1,
     customDomains: false,
     aiImages: false,
@@ -36,6 +38,7 @@ export const PLANS: Record<
     label: "Pro",
     priceMonthly: 24,
     aiGenerationsPerMonth: -1, // unlimited
+    appGenerationsPerMonth: -1, // unlimited
     publishedProjects: 10,
     customDomains: true,
     aiImages: true,
@@ -49,6 +52,7 @@ export const PLANS: Record<
     label: "Enterprise",
     priceMonthly: null,
     aiGenerationsPerMonth: -1,
+    appGenerationsPerMonth: -1,
     publishedProjects: -1, // unlimited
     customDomains: true,
     aiImages: true,

@@ -14,6 +14,7 @@ import { toast } from "@/components/ui/toast";
 import { timeAgo, cn } from "@/lib/utils";
 import { archiveProjectAction, deleteProjectAction, duplicateProjectAction, restoreProjectAction, updateProjectAction } from "@/lib/actions/projects";
 import type { ProjectListItem } from "@/lib/server/data/projects";
+import { CreditsBanner } from "@/components/ui/credits-banner";
 
 type Item = ProjectListItem & { role: string };
 
@@ -58,7 +59,8 @@ export function ProjectsClient({ initial, showArchived }: { initial: Item[]; sho
 
   return (
     <div className="max-w-6xl mx-auto px-5 py-10">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <CreditsBanner />
+      <div className="flex flex-wrap items-center justify-between gap-4 mt-6">
         <div>
           <h1 className="font-display font-bold text-3xl tracking-tight text-white">Projects</h1>
           <p className="text-sm text-zinc-500 mt-1">{filtered.length} project{filtered.length === 1 ? "" : "s"}</p>

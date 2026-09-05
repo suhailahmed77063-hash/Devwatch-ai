@@ -2,7 +2,7 @@ import type { Project, User } from "@prisma/client";
 import { ConfigError, AiProviderError, ValidationError } from "@/lib/errors";
 import { logger } from "../logger";
 import { requireDb } from "../db";
-import { getLLM } from "../ai/config";
+import { getAgentLLM } from "../ai/config";
 import { structured } from "../ai/structured";
 import { assertPlanAllowed, recordUsage } from "../usage";
 import { logAudit } from "../audit";
@@ -102,13 +102,13 @@ async function verifyAndFix(input: AgentInput, kind: RunKind): Promise<{ result:
     const failing = result.steps.filter((s) => s.status === "fail" || s.status === "warn");
     let fix;
     try {
-      const res = await structured(() => getLLM(input.project), {
+      const res = await structured(() => getAgentLLM(input.project), {
         label: "ai fix",
         schema: appFixSchema,
         request: {
           system: appSystem(),
           user: buildFixPrompt({ files, failingSteps: failing, attempt: fixIterations, maxAttempts: MAX_FIX_ATTEMPTS }),
-          maxTokens: 8000,
+          maxTokens: 16000,
         },
       });
       fix = res;
@@ -161,10 +161,10 @@ export async function runGenerateApp(input: AgentInput & { prompt: string }): Pr
   try {
     // 1. Blueprint
     input.emit({ type: "stage", label: "Analyzing requirements…" });
-    const bp = await structured(() => getLLM(input.project), {
+    const bp = await structured(() => getAgentLLM(input.project), {
       label: "app blueprint",
       schema: blueprintSchema,
-      request: { system: appSystem(), user: buildBlueprintPrompt(prompt), maxTokens: 6000 },
+      request: { system: appSystem(), user: buildBlueprintPrompt(prompt), maxTokens: 12000 },
     });
     tokensIn += bp.tokensIn;
     tokensOut += bp.tokensOut;
@@ -184,10 +184,10 @@ export async function runGenerateApp(input: AgentInput & { prompt: string }): Pr
 
     // 2. Files
     input.emit({ type: "stage", label: "Writing application files…" });
-    const filesRes = await structured(() => getLLM(input.project), {
+    const filesRes = await structured(() => getAgentLLM(input.project), {
       label: "app files",
       schema: appFilesSchema,
-      request: { system: appSystem(), user: buildAppFilesPrompt(bp.data, prompt), maxTokens: 16000 },
+      request: { system: appSystem(), user: buildAppFilesPrompt(bp.data, prompt), maxTokens: 64000 },
     });
     tokensIn += filesRes.tokensIn;
     tokensOut += filesRes.tokensOut;
@@ -259,10 +259,10 @@ export async function runCodingAgent(input: AgentInput & { message: string }): P
 
     // 1. Analyze + plan
     input.emit({ type: "stage", label: "Analyzing request…" });
-    const plan = await structured(() => getLLM(input.project), {
+    const plan = await structured(() => getAgentLLM(input.project), {
       label: "agent plan",
       schema: appPlanSchema,
-      request: { system: appSystem(), user: buildAgentPlanPrompt({ files, lastRun: lastRunCtx, message, history: historyCtx }), maxTokens: 10000 },
+      request: { system: appSystem(), user: buildAgentPlanPrompt({ files, lastRun: lastRunCtx, message, history: historyCtx }), maxTokens: 20000 },
     });
     await recordUsage({ userId: input.actor.id, kind: "AI_TOKENS", amount: plan.tokensIn + plan.tokensOut }).catch(() => {});
     input.emit({ type: "plan", steps: plan.data.steps });

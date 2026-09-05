@@ -10,6 +10,7 @@ export interface AiSettings {
   baseUrl: string;
   chatModel: string;
   generationModel: string;
+  agentModel: string;
   imageModel: string;
 }
 
@@ -19,7 +20,7 @@ export function resolveAiSettings(project?: Pick<Project, "aiConfig"> | null): A
   if (!apiKey) {
     throw new ConfigError(
       "AI provider is not configured: set OPENAI_API_KEY in .env.local (any OpenAI-compatible endpoint works via OPENAI_BASE_URL).",
-      "AI is not configured yet. Add an OPENAI_API_KEY to your .env.local — WebForge supports any OpenAI-compatible endpoint."
+      "AI is not configured. Please add OPENAI_API_KEY to your Vercel environment variables. You can use OpenAI, Anthropic (via OpenRouter), or any OpenAI-compatible API."
     );
   }
   const baseUrl = optEnv("OPENAI_BASE_URL") ?? "https://api.openai.com/v1";
@@ -34,6 +35,8 @@ export function resolveAiSettings(project?: Pick<Project, "aiConfig"> | null): A
     baseUrl: raw?.baseUrl ?? baseUrl,
     chatModel: raw?.chatModel ?? process.env.AI_CHAT_MODEL ?? "gpt-4o-mini",
     generationModel: raw?.model ?? process.env.AI_GENERATION_MODEL ?? "gpt-4o",
+    // Coding agent benefits from a coder-tuned model; falls back to chatModel.
+    agentModel: process.env.AI_AGENT_MODEL ?? process.env.AI_CHAT_MODEL ?? "gpt-4o-mini",
     imageModel: process.env.AI_IMAGE_MODEL ?? "gpt-image-1",
   };
 }
@@ -55,6 +58,18 @@ export function getLLM(project?: Pick<Project, "aiConfig"> | null): LLMProvider 
   });
   if (!project?.aiConfig) cached = llm;
   return llm;
+}
+
+/** LLM provider for the app-builder coding agent (dedicated model override,
+ * with rate-limit failover to the chat model). */
+export function getAgentLLM(project?: Pick<Project, "aiConfig"> | null): LLMProvider {
+  const s = resolveAiSettings(project);
+  return new OpenAICompatibleProvider({
+    apiKey: s.apiKey,
+    baseUrl: s.baseUrl,
+    chatModel: s.agentModel,
+    fallbackModel: s.chatModel,
+  });
 }
 
 export function getImageProvider(project?: Pick<Project, "aiConfig"> | null): ImageProvider | null {

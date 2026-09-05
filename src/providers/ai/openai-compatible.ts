@@ -9,6 +9,8 @@ export interface OpenAICompatConfig {
   imageModel?: string;
   /** optional headers, e.g. x-api-key for Anthropic-compatible gateways */
   extraHeaders?: Record<string, string>;
+  /** model to retry once with on rate-limit (429) — e.g. agent model → chat model failover */
+  fallbackModel?: string;
 }
 
 function messagesOf(req: LLMRequest): ChatTurn[] {
@@ -30,6 +32,14 @@ export class OpenAICompatibleProvider implements LLMProvider {
   private async raw(req: LLMRequest, stream: boolean): Promise<Response> {
     let res: Response;
     try {
+      const body = JSON.stringify({
+        model: req.model ?? this.cfg.chatModel,
+        messages: messagesOf(req),
+        temperature: req.temperature ?? 0.4,
+        max_tokens: req.maxTokens ?? 4096,
+        stream,
+        ...(req.json ? { response_format: { type: "json_object" } } : {}),
+      });
       res = await fetch(this.endpoint(), {
         method: "POST",
         headers: {
@@ -37,31 +47,50 @@ export class OpenAICompatibleProvider implements LLMProvider {
           Authorization: `Bearer ${this.cfg.apiKey}`,
           ...(this.cfg.extraHeaders ?? {}),
         },
-        body: JSON.stringify({
-          model: req.model ?? this.cfg.chatModel,
-          messages: messagesOf(req),
-          temperature: req.temperature ?? 0.4,
-          max_tokens: req.maxTokens ?? 4096,
-          stream,
-          ...(req.json ? { response_format: { type: "json_object" } } : {}),
-        }),
-        signal: AbortSignal.timeout(120_000),
+        body,
+        signal: AbortSignal.timeout(Number(process.env.AI_REQUEST_TIMEOUT_MS) || 180_000),
       });
     } catch (e) {
-      throw new AiProviderError("Network error while calling AI provider", "The AI service could not be reached. Please try again.", undefined, e);
+      const msg = e instanceof Error ? e.message : String(e);
+      throw new AiProviderError(`Network error calling AI: ${msg}`, "The AI service could not be reached. Check your API key and network connection.", undefined, e);
     }
     if (!res.ok) {
       const body = await res.text().catch(() => "");
+      // Some OpenAI-compatible endpoints (many free OpenRouter models) do not
+      // support response_format. Retry once without it so structured output
+      // still works — the caller validates JSON with its own repair pass.
+      if (res.status === 400 && req.json && /response_format|json/i.test(body)) {
+        logger.warn("ai.provider.json_mode_fallback", { status: res.status, body: body.slice(0, 200) });
+        return this.raw({ ...req, json: false }, stream);
+      }
+      // Rate-limit failover: free-tier models 429 frequently. Retry once with
+      // the configured fallback model so the pipeline survives quota bumps.
+      if (res.status === 429 && this.cfg.fallbackModel && req.model !== this.cfg.fallbackModel) {
+        logger.warn("ai.provider.rate_limit_failover", { from: req.model ?? this.cfg.chatModel, to: this.cfg.fallbackModel });
+        return this.raw({ ...req, model: this.cfg.fallbackModel }, stream);
+      }
       logger.error("ai.provider.http_error", { status: res.status, body: body.slice(0, 500) });
       if (res.status === 401 || res.status === 403) {
         throw new ConfigError(
           "AI provider authentication failed. Check the AI provider API key.",
-          "The AI provider key is invalid. Add a valid key to your .env.local (OPENAI_API_KEY)."
+          "The AI provider key is invalid or expired. Update OPENAI_API_KEY in your Vercel environment variables."
+        );
+      }
+      if (res.status === 400) {
+        throw new AiProviderError(
+          `AI provider rejected the request: ${body.slice(0, 200)}`,
+          "The AI request was malformed. Please try rephrasing your prompt."
+        );
+      }
+      if (res.status >= 500) {
+        throw new AiProviderError(
+          `AI provider server error (${res.status}): ${body.slice(0, 200)}`,
+          "The AI service is temporarily unavailable. Please try again in a moment."
         );
       }
       throw new AiProviderError(
-        `AI provider returned ${res.status}`,
-        "The AI service returned an error. Please try again in a moment."
+        `AI provider returned ${res.status}: ${body.slice(0, 200)}`,
+        "The AI service returned an unexpected error. Please try again."
       );
     }
     return res;

@@ -57,7 +57,17 @@ export async function assertPlanAllowed(kind: UsageKind, ctx: LimitContext): Pro
     if (n === 0) throw new UpgradeRequiredError("AI generation is a Pro feature. Upgrade to unlock unlimited AI generations.");
     if (n > 0) {
       const used = (await usageOf(ctx.user.id))[kind] ?? 0;
-      if (used >= n) throw new UsageLimitError();
+      if (used >= n) throw new UsageLimitError("You've used all 3 free website generations this month. Upgrade to Pro for unlimited generations.");
+    }
+    return;
+  }
+
+  if (kind === "APP_GENERATION") {
+    const n = limits.appGenerationsPerMonth;
+    if (n === 0) throw new UpgradeRequiredError("AI app builder is a Pro feature. Upgrade to unlock app generation.");
+    if (n > 0) {
+      const used = (await usageOf(ctx.user.id))["APP_GENERATION"] ?? 0;
+      if (used >= n) throw new UsageLimitError("You've used your 1 free app generation. Upgrade to Pro for unlimited app generation.");
     }
     return;
   }
@@ -99,6 +109,7 @@ export interface DashboardUsage {
   month: string;
   byKind: Record<string, number>;
   aiGenerations: { used: number; limit: number; unlimited: boolean };
+  appGenerations: { used: number; limit: number; unlimited: boolean };
   published: { used: number; limit: number; unlimited: boolean };
 }
 
@@ -112,6 +123,7 @@ export async function getDashboardUsage(userId: string): Promise<DashboardUsage>
   });
   const publishedCount = new Set(deployments.map((d) => d.projectId)).size;
   const genLimit = PLANS[user.plan].aiGenerationsPerMonth;
+  const appLimit = PLANS[user.plan].appGenerationsPerMonth;
   const pubLimit = PLANS[user.plan].publishedProjects;
   return {
     month: monthKey(),
@@ -120,6 +132,11 @@ export async function getDashboardUsage(userId: string): Promise<DashboardUsage>
       used: byKind.AI_GENERATION ?? 0,
       limit: genLimit === -1 ? 0 : genLimit,
       unlimited: genLimit === -1,
+    },
+    appGenerations: {
+      used: byKind.APP_GENERATION ?? 0,
+      limit: appLimit === -1 ? 0 : appLimit,
+      unlimited: appLimit === -1,
     },
     published: {
       used: publishedCount,

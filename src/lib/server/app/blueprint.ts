@@ -55,11 +55,30 @@ export const blueprintSchema = z.object({
     )
     .max(30)
     .default([]),
+  // Lenient on purpose: free models often omit fields or return objects where
+  // strings are expected. Defaults + coercion repair the output instead of
+  // failing the whole generation; normalizeBlueprint() fills the gaps.
   pages: z
-    .array(z.object({ route: z.string().min(1).max(200), name: z.string().min(1).max(80), components: z.array(z.string().max(60)).max(20).default([]) }))
+    .array(
+      z.object({
+        route: z.string().max(200).default(""),
+        name: z.string().max(80).default(""),
+        components: z.array(z.string().max(60)).max(20).default([]),
+      })
+    )
     .max(30)
     .default([]),
-  testPlan: z.array(z.string().max(300)).max(20).default([]),
+  testPlan: z
+    .array(z.union([z.string().max(300), z.record(z.string(), z.any())]))
+    .max(20)
+    .transform((items) =>
+      items.map((i) => {
+        if (typeof i === "string") return i;
+        const named = (i as Record<string, unknown>).name;
+        return typeof named === "string" && named ? named : JSON.stringify(i);
+      })
+    )
+    .default([]),
 });
 
 export const appPlanSchema = z.object({
@@ -76,7 +95,7 @@ export const appFixSchema = z.object({
 });
 
 export const appFilesSchema = z.object({
-  files: z.array(z.object({ path: z.string().min(1).max(300), content: z.string().max(400_000) })).max(160),
+  files: z.array(z.object({ path: z.string().min(1).max(300), content: z.string().max(400_000) })).max(100),
   summary: z.string().max(800).default(""),
 });
 
@@ -88,6 +107,12 @@ export type AppFilesResult = z.infer<typeof appFilesSchema>;
 const ALLOWED_EXT = new Set([
   ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".json", ".md", ".txt", ".env.example",
   ".css", ".html", ".yml", ".yaml", ".prisma", ".sql", ".svg", ".png", ".jpg", ".jpeg", ".webp",
+]);
+
+/** Whole-filename allowlist for common dotfiles that carry no extension. */
+const ALLOWED_DOTFILES = new Set([
+  ".gitignore", ".dockerignore", ".npmrc", ".nvmrc", ".editorconfig", ".prettierrc", ".eslintrc",
+  ".env", ".env.production", ".env.development", ".env.local", ".env.test",
 ]);
 
 const BLOCKED_PATHS = new Set([
@@ -112,8 +137,8 @@ export function assertSafePath(path: string, { allowAnyExt = false }: { allowAny
   }
   if (!allowAnyExt) {
     const name = p.split("/").pop() ?? "";
-    // Whole-filename allowlist first (dotfiles like .env.example).
-    if (ALLOWED_EXT.has(name)) {
+    // Whole-filename allowlist first (dotfiles like .env.example, .gitignore).
+    if (ALLOWED_EXT.has(name) || ALLOWED_DOTFILES.has(name)) {
       // ok
     } else {
       const ext = "." + (name.split(".").pop() ?? "");
@@ -127,7 +152,7 @@ export function assertSafePath(path: string, { allowAnyExt = false }: { allowAny
 }
 
 export function validateOps(ops: AppFileOp[]): AppFileOp[] {
-  if (ops.length > 160) throw new ValidationError("Too many file operations in one request (max 160)");
+  if (ops.length > 100) throw new ValidationError("Too many file operations in one request (max 100)");
   return ops.map((op) => {
     switch (op.kind) {
       case "create":
@@ -161,5 +186,11 @@ export function normalizeBlueprint(input: unknown): AppBlueprint {
     const detail = check.error.issues.slice(0, 5).map((i) => `${i.path.join(".")} ${i.message}`).join("; ");
     throw new ValidationError(`App blueprint failed validation${detail ? ` (${detail})` : ""}`);
   }
-  return check.data;
+  const data = check.data;
+  // Fill missing page names/routes so downstream prompts stay consistent.
+  for (const p of data.pages) {
+    if (!p.name) p.name = p.route ? (p.route.replace(/^\/+/, "") || "Home") : "Page";
+    if (!p.route) p.route = `/${p.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+  }
+  return data;
 }

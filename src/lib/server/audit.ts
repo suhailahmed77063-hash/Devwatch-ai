@@ -16,6 +16,11 @@ export async function logAudit(input: {
   try {
     await db.auditLog.create({ data: input as Prisma.AuditLogUncheckedCreateInput });
   } catch (e) {
-    logger.warn("audit.write_failed", { error: e instanceof Error ? e.message : String(e) });
+    logger.warn("audit.write_failed", {
+      error: e instanceof Error ? e.message : String(e),
+      action: input.action,
+      projectId: input.projectId ?? null,
+      entityId: input.entityId ?? null,
+    });
   }
 }

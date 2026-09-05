@@ -6,7 +6,7 @@ import { assertSafePath } from "./blueprint";
 import { starterFiles, hasRealFiles } from "./templates";
 import type { AppFileOp, PipelineStep, RunKind } from "@/types/app";
 
-const MAX_TOTAL_BYTES = 8 * 1024 * 1024; // 8 MB virtual workspace cap
+const MAX_TOTAL_BYTES = 16 * 1024 * 1024; // 16 MB virtual workspace cap
 
 /** Ensure the workspace exists (starter files on first use). Returns path -> content map. */
 export async function ensureAppWorkspace(projectId: string): Promise<Record<string, string>> {
@@ -95,8 +95,8 @@ export async function applyFileOps(projectId: string, ops: AppFileOp[], actorId?
   if (totalBytes > MAX_TOTAL_BYTES) {
     throw new ValidationError(`Workspace is too large (${(totalBytes / 1024 / 1024).toFixed(1)} MB, limit 8 MB).`);
   }
-  if (Object.keys(next).length > 400) {
-    throw new ValidationError("Workspace file limit reached (400 files).");
+  if (Object.keys(next).length > 200) {
+    throw new ValidationError("Workspace file limit reached (200 files).");
   }
 
   await db.$transaction(async (tx) => {

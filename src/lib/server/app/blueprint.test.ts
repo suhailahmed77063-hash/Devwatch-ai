@@ -1,14 +1,27 @@
 import { describe, expect, it } from "vitest";
 import { assertSafePath, normalizeBlueprint, validateOps } from "./blueprint";
 import { ValidationError } from "@/lib/errors";
-import type { AppBlueprint } from "@/types/app";
+import type { AppBlueprint } from "@/types/app";  describe("normalizeBlueprint (lenient repair)", () => {
+    it("fills missing page names/routes and coerces object testPlan items to strings", () => {
+      const bp = normalizeBlueprint({
+        name: "TestApp",
+        pages: [{ route: "/home", components: [] }, { name: "About" }],
+        testPlan: ["runs", { name: "object item" }],
+      });
+      expect(bp.pages[0].name).toBe("home");
+      expect(bp.pages[1].route).toBe("/about");
+      expect(bp.testPlan).toEqual(["runs", "object item"]);
+    });
+  });
 
-describe("assertSafePath", () => {
+  describe("assertSafePath", () => {
   it("accepts clean repo-relative paths", () => {
     expect(assertSafePath("src/app.ts")).toBe("src/app.ts");
     expect(assertSafePath("src/lib/env.ts")).toBe("src/lib/env.ts");
     expect(assertSafePath("package.json")).toBe("package.json");
     expect(assertSafePath(".env.example")).toBe(".env.example");
+    expect(assertSafePath(".gitignore")).toBe(".gitignore");
+    expect(assertSafePath(".dockerignore")).toBe(".dockerignore");
     // windows-style separators are normalized
     expect(assertSafePath("src\\index.ts")).toBe("src/index.ts");
   });
@@ -53,7 +66,7 @@ describe("validateOps", () => {
   });
 
   it("rejects too many ops", () => {
-    const ops = Array.from({ length: 161 }, (_, i) => ({
+    const ops = Array.from({ length: 101 }, (_, i) => ({
       kind: "create" as const,
       path: `src/f${i}.ts`,
       content: "",

@@ -95,6 +95,7 @@ enum UsageKind {
   CODE_EXPORT
   DEPLOYMENT
   STORAGE
+  APP_GENERATION
 }
 
 enum ApiKeyStatus {

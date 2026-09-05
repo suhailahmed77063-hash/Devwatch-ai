@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { workspaceDir } from "./templates";
 import { logger } from "../logger";
@@ -25,10 +26,21 @@ function quoteWinArg(a: string): string {
 export async function runCommand(cwd: string, cmd: string, args: string[], timeoutMs = 120_000): Promise<CmdResult> {
   let file = cmd;
   let cargs = args;
+  // Serverless-safe: npm/tsc/vitest write caches under HOME, which is read-only
+  // in serverless runtimes (Vercel). Redirect HOME + the npm cache to the OS
+  // temp dir so `npm install` inside the sandbox works.
+  const tmp = os.tmpdir();
   const opts: Record<string, unknown> = {
     cwd,
     windowsHide: true,
-    env: { ...process.env, FORCE_COLOR: "0", NO_COLOR: "1" },
+    env: {
+      ...process.env,
+      FORCE_COLOR: "0",
+      NO_COLOR: "1",
+      HOME: tmp,
+      npm_config_cache: path.join(tmp, "npm-cache"),
+      NPM_CONFIG_CACHE: path.join(tmp, "npm-cache"),
+    },
   };
   if (process.platform === "win32" && /\.(cmd|bat)$/i.test(cmd)) {
     file = process.env.ComSpec || "cmd.exe";
