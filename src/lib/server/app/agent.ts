@@ -19,6 +19,7 @@ import { gitCommit } from "./workspace";
 import { hasRealFiles, workspaceDir } from "./templates";
 import { assertNotCancelled, clearCancel, isCancelled } from "./cancel";
 import { runDeployment } from "../deploy/run";
+import { buildProjectContext, formatContextForPrompt, extractMemoriesFromInteraction } from "../ai/memory";
 
 export type AppEvent =
   | { type: "stage"; label: string }
