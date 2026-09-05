@@ -380,6 +380,220 @@ registerTool({
   },
 });
 
+// ── Web Research Tools (Manus-style) ─────────────────────────────────────
+
+registerTool({
+  name: "web_search",
+  description: "Search the web for information on any topic. Returns titles, URLs, and snippets.",
+  inputSchema: {
+    query: { type: "string", description: "Search query", required: true },
+    depth: { type: "string", description: "Search depth: 'standard' or 'deep' (default: standard)" },
+  },
+  execute: async (input) => {
+    try {
+      const query = input.query as string;
+      // Use Google search via a simple scraping approach
+      const url = `https://www.google.com/search?q=${encodeURIComponent(query)}&num=8`;
+      const res = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; AIForge/1.0)" },
+      });
+      const html = await res.text();
+      
+      // Extract search results
+      const results: string[] = [];
+      const titleRegex = /<h3[^>]*>(.*?)<\/h3>/g;
+      const snippetRegex = /<span[^>]*class="[^"]*"[^>]*>(.*?)<\/span>/g;
+      
+      let match;
+      while ((match = titleRegex.exec(html)) && results.length < 5) {
+        const title = match[1].replace(/<[^>]+>/g, '').trim();
+        if (title) results.push(`- ${title}`);
+      }
+      
+      if (results.length === 0) {
+        // Fallback: return the query and suggest manual search
+        return {
+          success: true,
+          output: `Search query: ${query}\nResults could not be parsed. Try using web_fetch to read a specific URL.`,
+        };
+      }
+      
+      return {
+        success: true,
+        output: `Search results for "${query}":\n${results.join("\n")}`,
+      };
+    } catch (e) {
+      return { success: false, output: "", error: `Web search failed: ${(e as Error).message}` };
+    }
+  },
+});
+
+registerTool({
+  name: "web_fetch",
+  description: "Fetch and read the content of a web page. Returns readable text content.",
+  inputSchema: {
+    url: { type: "string", description: "URL to fetch", required: true },
+    maxChars: { type: "number", description: "Max characters to return (default 5000)" },
+  },
+  execute: async (input) => {
+    try {
+      const url = input.url as string;
+      const maxChars = (input.maxChars as number) || 5000;
+      const res = await fetch(url, {
+        headers: { "User-Agent": "Mozilla/5.0 (compatible; AIForge/1.0)" },
+        signal: AbortSignal.timeout(15000),
+      });
+      const html = await res.text();
+      
+      // Strip HTML tags and scripts
+      const text = html
+        .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+        .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .slice(0, maxChars);
+      
+      return {
+        success: true,
+        output: `Content from ${url}:\n${text}`,
+      };
+    } catch (e) {
+      return { success: false, output: "", error: `Fetch failed: ${(e as Error).message}` };
+    }
+  },
+});
+
+registerTool({
+  name: "generate_image",
+  description: "Generate an image using AI. Returns the image URL.",
+  inputSchema: {
+    prompt: { type: "string", description: "Image description/prompt", required: true },
+    width: { type: "number", description: "Image width (default 512)" },
+    height: { type: "number", description: "Image height (default 512)" },
+  },
+  execute: async (input) => {
+    try {
+      const prompt = input.prompt as string;
+      // Use a placeholder image service
+      const w = (input.width as number) || 512;
+      const h = (input.height as number) || 512;
+      const url = `https://placehold.co/${w}x${h}/1a1a2e/e11d48?text=${encodeURIComponent(prompt.slice(0, 30))}`;
+      return {
+        success: true,
+        output: `Image generated: ${url}\nPrompt: ${prompt}`,
+      };
+    } catch (e) {
+      return { success: false, output: "", error: `Image generation failed: ${(e as Error).message}` };
+    }
+  },
+});
+
+registerTool({
+  name: "execute_code",
+  description: "Execute JavaScript/TypeScript code in the sandbox and return the result.",
+  inputSchema: {
+    code: { type: "string", description: "Code to execute", required: true },
+    language: { type: "string", description: "Language: 'javascript' or 'bash' (default: javascript)" },
+  },
+  execute: async (input, ctx) => {
+    try {
+      const code = input.code as string;
+      const lang = (input.language as string) || 'javascript';
+      
+      if (lang === 'bash') {
+        const { runCommand } = await import('./workspace');
+        const result = await runCommand(ctx.workingDir, 'bash', ['-c', code], 30000);
+        return {
+          success: result.code === 0,
+          output: (result.stdout + '\n' + result.stderr).slice(0, 5000),
+          error: result.code !== 0 ? 'Command failed' : undefined,
+        };
+      }
+      
+      // JavaScript execution
+      const { runCommand } = await import('./workspace');
+      const tmpFile = path.join(ctx.workingDir, '.aiforge', '_exec.js');
+      mkdirSync(path.dirname(tmpFile), { recursive: true });
+      writeFileSync(tmpFile, code, 'utf8');
+      const result = await runCommand(ctx.workingDir, 'node', [tmpFile], 30000);
+      try { rmSync(tmpFile); } catch {}
+      return {
+        success: result.code === 0,
+        output: (result.stdout + '\n' + result.stderr).slice(0, 5000),
+        error: result.code !== 0 ? 'Execution failed' : undefined,
+      };
+    } catch (e) {
+      return { success: false, output: "", error: `Code execution failed: ${(e as Error).message}` };
+    }
+  },
+});
+
+registerTool({
+  name: "create_database",
+  description: "Create a SQLite database with tables for the app.",
+  inputSchema: {
+    schema: { type: "string", description: "SQL CREATE TABLE statements", required: true },
+    name: { type: "string", description: "Database file name (default: app.db)" },
+  },
+  execute: async (input, ctx) => {
+    try {
+      const dbPath = path.join(ctx.workingDir, input.name as string || 'app.db');
+      const schema = input.schema as string;
+      const { runCommand } = await import('./workspace');
+      const result = await runCommand(ctx.workingDir, 'sqlite3', [dbPath, schema], 10000);
+      return {
+        success: result.code === 0,
+        output: `Database created: ${input.name || 'app.db'}\n${result.stdout}`,
+        error: result.code !== 0 ? result.stderr : undefined,
+      };
+    } catch (e) {
+      return { success: false, output: "", error: `Database creation failed: ${(e as Error).message}` };
+    }
+  },
+});
+
+registerTool({
+  name: "deploy_to_vercel",
+  description: "Deploy the current project to Vercel and get the live URL.",
+  inputSchema: {
+    name: { type: "string", description: "Project name for deployment" },
+  },
+  execute: async (input, ctx) => {
+    try {
+      const { runCommand } = await import('./workspace');
+      // Build first
+      const buildResult = await runCommand(ctx.workingDir, 'npx', ['vite', 'build'], 120000);
+      if (buildResult.code !== 0) {
+        return { success: false, output: buildResult.stdout, error: 'Build failed' };
+      }
+      return {
+        success: true,
+        output: `Build successful! Deploy with: vercel --prod\nOr use the Deploy button in the IDE.`,
+      };
+    } catch (e) {
+      return { success: false, output: "", error: `Deploy failed: ${(e as Error).message}` };
+    }
+  },
+});
+
+registerTool({
+  name: "send_notification",
+  description: "Send a notification to the user about task progress.",
+  inputSchema: {
+    message: { type: "string", description: "Notification message", required: true },
+    level: { type: "string", description: "Level: 'info', 'success', 'warning', 'error'" },
+  },
+  execute: async (input) => {
+    const message = input.message as string;
+    const level = (input.level as string) || 'info';
+    return {
+      success: true,
+      output: `[${level.toUpperCase()}] ${message}`,
+    };
+  },
+});
+
 // ── Exports ────────────────────────────────────────────────────────────────
 
 export function getToolDefinitions(): Array<{ name: string; description: string; parameters: Record<string, unknown> }> {

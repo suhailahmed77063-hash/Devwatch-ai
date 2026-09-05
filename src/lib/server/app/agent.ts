@@ -200,7 +200,53 @@ export async function runGenerateApp(input: AgentInput & { prompt: string }): Pr
     const labels = await applyFileOps(input.project.id, validated, input.actor.id);
     for (const l of labels) input.emit({ type: "op", label: l });
 
-    // 3. Automated QA + fix loop
+    // 3. Install dependencies and build
+    input.emit({ type: "stage", label: "Installing dependencies..." });
+    const { syncWorkspaceToDisk, runNpx } = await import("./workspace");
+    const { envVarMap } = await import("@/lib/server/app/data");
+    const envVars = await envVarMap(input.project.id).catch(() => ({}));
+    const filesMap: Record<string, string> = {};
+    for (const f of filesRes.data.files) filesMap[f.path] = f.content;
+    const workDir = await syncWorkspaceToDisk(input.project.id, filesMap, envVars);
+    
+    const installResult = await runNpx(workDir, ["--yes", "npm", "install"], 120000);
+    if (installResult.code !== 0) {
+      input.emit({ type: "stage", label: "npm install had issues, continuing anyway..." });
+    } else {
+      input.emit({ type: "stage", label: "Dependencies installed ✓" });
+    }
+    
+    // 4. Run typecheck and build
+    input.emit({ type: "stage", label: "Type-checking code..." });
+    const { runCommand } = await import("./workspace");
+    const tscResult = await runCommand(workDir, "npx", ["tsc", "--noEmit"], 60000);
+    if (tscResult.code !== 0) {
+      input.emit({ type: "stage", label: "Type errors found, attempting fix..." });
+      // Try to fix type errors by re-generating with error context
+      try {
+        const fixRes = await structured(() => getAgentLLM(input.project), {
+          label: "app fix",
+          schema: appFixSchema,
+          request: {
+            system: appSystem(),
+            user: `The generated code has TypeScript errors. Fix them.\n\nERRORS:\n${tscResult.stderr.slice(0, 3000)}\n\nCurrent files: ${Object.keys(filesRes.data.files).join(', ')}`,
+            maxTokens: 8192,
+          },
+        });
+        if (fixRes.data.operations.length > 0) {
+          const fixOps = validateOps(fixRes.data.operations);
+          const fixLabels = await applyFileOps(input.project.id, fixOps, input.actor.id);
+          for (const l of fixLabels) input.emit({ type: "op", label: l });
+          // Re-sync and re-check
+          const currentFiles = await readAppFiles(input.project.id);
+          await syncWorkspaceToDisk(input.project.id, currentFiles, envVars);
+        }
+      } catch {
+        // Continue even if fix fails
+      }
+    }
+    
+    // 5. Run tests
     input.emit({ type: "stage", label: "Running automated tests..." });
     const { result } = await verifyAndFix(input, "generate");
 
