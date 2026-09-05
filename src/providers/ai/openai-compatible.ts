@@ -76,6 +76,12 @@ export class OpenAICompatibleProvider implements LLMProvider {
           "The AI provider key is invalid or expired. Update OPENAI_API_KEY in your Vercel environment variables."
         );
       }
+      if (res.status === 402) {
+        throw new ConfigError(
+          `AI provider payment required: ${body.slice(0, 200)}`,
+          "Your AI provider account has no credits. Add credits at openrouter.ai/settings/credits or switch to a free model like 'google/gemini-2.0-flash-001' by setting AI_CHAT_MODEL and AI_AGENT_MODEL environment variables."
+        );
+      }
       if (res.status === 400) {
         throw new AiProviderError(
           `AI provider rejected the request: ${body.slice(0, 200)}`,

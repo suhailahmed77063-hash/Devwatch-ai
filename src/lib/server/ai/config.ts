@@ -33,10 +33,9 @@ export function resolveAiSettings(project?: Pick<Project, "aiConfig"> | null): A
     provider,
     apiKey,
     baseUrl: raw?.baseUrl ?? baseUrl,
-    chatModel: raw?.chatModel ?? process.env.AI_CHAT_MODEL ?? "gpt-4o-mini",
-    generationModel: raw?.model ?? process.env.AI_GENERATION_MODEL ?? "gpt-4o",
-    // Coding agent benefits from a coder-tuned model; falls back to chatModel.
-    agentModel: process.env.AI_AGENT_MODEL ?? process.env.AI_CHAT_MODEL ?? "gpt-4o-mini",
+    chatModel: raw?.chatModel ?? process.env.AI_CHAT_MODEL ?? "openrouter/free",
+    generationModel: raw?.model ?? process.env.AI_GENERATION_MODEL ?? "openrouter/free",
+    agentModel: process.env.AI_AGENT_MODEL ?? process.env.AI_CHAT_MODEL ?? "openrouter/free",
     imageModel: process.env.AI_IMAGE_MODEL ?? "gpt-image-1",
   };
 }
