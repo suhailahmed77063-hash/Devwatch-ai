@@ -108,7 +108,7 @@ async function verifyAndFix(input: AgentInput, kind: RunKind): Promise<{ result:
         request: {
           system: appSystem(),
           user: buildFixPrompt({ files, failingSteps: failing, attempt: fixIterations, maxAttempts: MAX_FIX_ATTEMPTS }),
-          maxTokens: 16000,
+          maxTokens: 8192,
         },
       });
       fix = res;
@@ -164,7 +164,7 @@ export async function runGenerateApp(input: AgentInput & { prompt: string }): Pr
     const bp = await structured(() => getAgentLLM(input.project), {
       label: "app blueprint",
       schema: blueprintSchema,
-      request: { system: appSystem(), user: buildBlueprintPrompt(prompt), maxTokens: 12000 },
+      request: { system: appSystem(), user: buildBlueprintPrompt(prompt), maxTokens: 4096 },
     });
     tokensIn += bp.tokensIn;
     tokensOut += bp.tokensOut;
@@ -187,7 +187,7 @@ export async function runGenerateApp(input: AgentInput & { prompt: string }): Pr
     const filesRes = await structured(() => getAgentLLM(input.project), {
       label: "app files",
       schema: appFilesSchema,
-      request: { system: appSystem(), user: buildAppFilesPrompt(bp.data, prompt), maxTokens: 64000 },
+      request: { system: appSystem(), user: buildAppFilesPrompt(bp.data, prompt), maxTokens: 16000 },
     });
     tokensIn += filesRes.tokensIn;
     tokensOut += filesRes.tokensOut;
@@ -262,7 +262,7 @@ export async function runCodingAgent(input: AgentInput & { message: string }): P
     const plan = await structured(() => getAgentLLM(input.project), {
       label: "agent plan",
       schema: appPlanSchema,
-      request: { system: appSystem(), user: buildAgentPlanPrompt({ files, lastRun: lastRunCtx, message, history: historyCtx }), maxTokens: 20000 },
+      request: { system: appSystem(), user: buildAgentPlanPrompt({ files, lastRun: lastRunCtx, message, history: historyCtx }), maxTokens: 8192 },
     });
     await recordUsage({ userId: input.actor.id, kind: "AI_TOKENS", amount: plan.tokensIn + plan.tokensOut }).catch(() => {});
     input.emit({ type: "plan", steps: plan.data.steps });

@@ -69,7 +69,7 @@ export class OpenAICompatibleProvider implements LLMProvider {
         logger.warn("ai.provider.rate_limit_failover", { from: req.model ?? this.cfg.chatModel, to: this.cfg.fallbackModel });
         return this.raw({ ...req, model: this.cfg.fallbackModel }, stream);
       }
-      logger.error("ai.provider.http_error", { status: res.status, body: body.slice(0, 500) });
+      logger.error("ai.provider.http_error", { status: res.status, body: body.slice(0, 1000), model: req.model ?? this.cfg.chatModel, endpoint: this.endpoint(), maxTokens: req.maxTokens });
       if (res.status === 401 || res.status === 403) {
         throw new ConfigError(
           "AI provider authentication failed. Check the AI provider API key.",
