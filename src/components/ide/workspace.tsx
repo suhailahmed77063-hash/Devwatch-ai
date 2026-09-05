@@ -13,6 +13,7 @@ import { FileExplorer } from "./file-explorer";
 import { IntegratedTerminal } from "./terminal";
 import { LivePreview } from "./live-preview";
 import { VersionHistory } from "./version-history";
+import { GitHubPanel } from "./github-panel";
 import { PlanPanel } from "./plan-panel";
 
 interface FileItem {
@@ -48,7 +49,7 @@ export function IdeWorkspace({ projectId, canEdit }: { projectId: string; canEdi
   const [planMode, setPlanMode] = useState(true); // Plan mode ON by default
 
   // UI state
-  const [leftPanel, setLeftPanel] = useState<"files" | "agent" | "plan">("files");
+  const [leftPanel, setLeftPanel] = useState<"files" | "agent" | "plan" | "github">("files");
   const [rightPanel, setRightPanel] = useState<"terminal" | "preview" | "history">("terminal");
   const [rightOpen, setRightOpen] = useState(true);
 
@@ -331,6 +332,15 @@ export function IdeWorkspace({ projectId, canEdit }: { projectId: string; canEdi
                 Plan
               </button>
             )}
+            <button
+              onClick={() => setLeftPanel("github")}
+              className={cn(
+                "flex-1 flex items-center justify-center gap-1.5 text-[10px] font-medium h-full transition",
+                leftPanel === "github" ? "text-white border-b-2 border-acc" : "text-zinc-500 hover:text-zinc-300"
+              )}
+            >
+              Git
+            </button>
           </div>
 
           {leftPanel === "files" ? (
@@ -352,6 +362,8 @@ export function IdeWorkspace({ projectId, canEdit }: { projectId: string; canEdi
               onPlanApproved={executePlan}
               onClearPlan={() => setPendingPlan(null)}
             />
+          ) : leftPanel === "github" ? (
+            <GitHubPanel projectId={projectId} />
           ) : (
             /* Agent Panel */
             <div className="flex-1 min-h-0 flex flex-col">

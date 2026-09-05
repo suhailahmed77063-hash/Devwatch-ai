@@ -320,6 +320,66 @@ registerTool({
   },
 });
 
+// ── GitHub Tools ──────────────────────────────────────────────────────────
+
+registerTool({
+  name: "git_commit",
+  description: "Commit all changes to the project's git repo",
+  inputSchema: {
+    message: { type: "string", description: "Commit message", required: true },
+  },
+  execute: async (input, ctx) => {
+    try {
+      const { gitCommit } = await import("./workspace");
+      const sha = await gitCommit(ctx.workingDir, input.message as string);
+      return {
+        success: true,
+        output: sha ? `Committed as ${sha.slice(0, 7)}` : "Nothing to commit",
+      };
+    } catch (e) {
+      return { success: false, output: "", error: (e as Error).message };
+    }
+  },
+});
+
+registerTool({
+  name: "git_status",
+  description: "Check git status of the workspace",
+  inputSchema: {},
+  execute: async (_input, ctx) => {
+    try {
+      const { runCommand } = await import("./workspace");
+      const res = await runCommand(ctx.workingDir, "git", ["status", "--short"]);
+      return {
+        success: true,
+        output: res.stdout || "Working tree clean",
+      };
+    } catch (e) {
+      return { success: false, output: "", error: (e as Error).message };
+    }
+  },
+});
+
+registerTool({
+  name: "git_log",
+  description: "View recent git commit history",
+  inputSchema: {
+    count: { type: "number", description: "Number of commits to show (default 10)" },
+  },
+  execute: async (input, ctx) => {
+    try {
+      const { gitLog } = await import("./workspace");
+      const count = (input.count as number) || 10;
+      const logs = await gitLog(ctx.workingDir, count);
+      if (logs.length === 0) return { success: true, output: "No commits yet" };
+      const formatted = logs.map(l => `${l.hash} ${l.message} (${l.date})`).join("\n");
+      return { success: true, output: formatted };
+    } catch (e) {
+      return { success: false, output: "", error: (e as Error).message };
+    }
+  },
+});
+
 // ── Exports ────────────────────────────────────────────────────────────────
 
 export function getToolDefinitions(): Array<{ name: string; description: string; parameters: Record<string, unknown> }> {
