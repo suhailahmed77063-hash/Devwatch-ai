@@ -13,6 +13,7 @@ import { FileExplorer } from "./file-explorer";
 import { IntegratedTerminal } from "./terminal";
 import { LivePreview } from "./live-preview";
 import { VersionHistory } from "./version-history";
+import { PlanPanel } from "./plan-panel";
 
 interface FileItem {
   path: string;
@@ -43,9 +44,11 @@ export function IdeWorkspace({ projectId, canEdit }: { projectId: string; canEdi
   const [prompt, setPrompt] = useState("");
   const [busy, setBusy] = useState(false);
   const [agentActivity, setAgentActivity] = useState<string[]>([]);
+  const [pendingPlan, setPendingPlan] = useState<{ planId: string; steps: string[]; summary: string; operations?: { kind: string; path: string }[]; runTests?: boolean; isNewProject?: boolean } | null>(null);
+  const [planMode, setPlanMode] = useState(true); // Plan mode ON by default
 
   // UI state
-  const [leftPanel, setLeftPanel] = useState<"files" | "agent">("files");
+  const [leftPanel, setLeftPanel] = useState<"files" | "agent" | "plan">("files");
   const [rightPanel, setRightPanel] = useState<"terminal" | "preview" | "history">("terminal");
   const [rightOpen, setRightOpen] = useState(true);
 
@@ -151,8 +154,85 @@ export function IdeWorkspace({ projectId, canEdit }: { projectId: string; canEdi
 
   // ── AI Agent ────────────────────────────────────────────────────────────
 
+  /** Generate a plan first (plan mode) */
+  const generatePlan = useCallback(async (message: string) => {
+    if (!message.trim() || busy) return;
+    setBusy(true);
+    setAgentActivity(["🤖 Analyzing requirements..."]);
+    setPrompt("");
+
+    try {
+      const res = await apiFetch<{ planId: string; plan: { steps: string[]; summary: string; operations?: { kind: string; path: string }[]; runTests?: boolean; isNewProject?: boolean } }>(
+        `/api/projects/${projectId}/plan`,
+        { method: "POST", body: JSON.stringify({ action: "generate", message }) }
+      );
+      setPendingPlan({ ...res.plan, planId: res.planId });
+      setAgentActivity([]);
+      toast("Plan ready for review", "success");
+    } catch (e) {
+      toast(e instanceof Error ? e.message : "Plan generation failed", "error");
+    } finally {
+      setBusy(false);
+    }
+  }, [projectId, busy]);
+
+  /** Execute an approved plan */
+  const executePlan = useCallback(async (planId: string, _message: string) => {
+    setBusy(true);
+    setAgentActivity([]);
+
+    try {
+      await streamPost(`/api/projects/${projectId}/app-agent`, { message: _message, planId }, {
+        onEvent: (event: string, data: unknown) => {
+          const d = data as Record<string, unknown>;
+          switch (event) {
+            case "stage":
+              setAgentActivity((prev) => [...prev, `⚙️ ${d.label}`]);
+              break;
+            case "op":
+              setAgentActivity((prev) => [...prev, `📝 ${d.label}`]);
+              break;
+            case "reply":
+              setAgentActivity((prev) => [...prev, `✅ ${d.text}`]);
+              toast(String(d.text), "success");
+              break;
+            case "checkpoint":
+              setAgentActivity((prev) => [...prev, `💾 Checkpoint v${d.version}: ${d.message}`]);
+              break;
+            case "error":
+              setAgentActivity((prev) => [...prev, `❌ ${d.message}`]);
+              toast(String(d.message), "error");
+              break;
+            case "done":
+              break;
+          }
+        },
+        onDone: () => {
+          setBusy(false);
+          void refreshFiles();
+        },
+        onError: (err) => {
+          setBusy(false);
+          toast(err.message, "error");
+        },
+      });
+    } catch (e) {
+      setBusy(false);
+      toast(e instanceof Error ? e.message : "Plan execution failed", "error");
+    }
+  }, [projectId, refreshFiles]);
+
+  /** Direct execution (bypass plan mode) */
   const handleAgentMessage = useCallback(async (message: string) => {
     if (!message.trim() || busy) return;
+
+    if (planMode) {
+      // Plan mode: generate plan first
+      await generatePlan(message);
+      return;
+    }
+
+    // Direct mode: execute immediately
     setBusy(true);
     setAgentActivity([]);
     setPrompt("");
@@ -196,7 +276,7 @@ export function IdeWorkspace({ projectId, canEdit }: { projectId: string; canEdi
       setBusy(false);
       toast(e instanceof Error ? e.message : "Agent failed", "error");
     }
-  }, [projectId, busy, refreshFiles]);
+  }, [projectId, busy, refreshFiles, planMode, generatePlan]);
 
   return (
     <div className="h-screen flex flex-col bg-[#0a0a0c] text-zinc-200">
@@ -240,6 +320,17 @@ export function IdeWorkspace({ projectId, canEdit }: { projectId: string; canEdi
             >
               <Bot className="w-3 h-3" /> Agent
             </button>
+            {pendingPlan && (
+              <button
+                onClick={() => setLeftPanel("plan")}
+                className={cn(
+                  "flex-1 flex items-center justify-center gap-1.5 text-[10px] font-medium h-full transition",
+                  leftPanel === "plan" ? "text-white border-b-2 border-acc" : "text-amber-400 hover:text-amber-300"
+                )}
+              >
+                Plan
+              </button>
+            )}
           </div>
 
           {leftPanel === "files" ? (
@@ -251,6 +342,15 @@ export function IdeWorkspace({ projectId, canEdit }: { projectId: string; canEdi
               onDelete={deleteFile}
               onRefresh={refreshFiles}
               loading={loading}
+            />
+          ) : leftPanel === "plan" && pendingPlan ? (
+            /* Plan Panel */
+            <PlanPanel
+              projectId={projectId}
+              canEdit={canEdit}
+              currentPlan={pendingPlan}
+              onPlanApproved={executePlan}
+              onClearPlan={() => setPendingPlan(null)}
             />
           ) : (
             /* Agent Panel */
@@ -274,6 +374,28 @@ export function IdeWorkspace({ projectId, canEdit }: { projectId: string; canEdi
                 )}
               </div>
               <div className="shrink-0 border-t border-white/5 p-2">
+                {/* Plan mode toggle */}
+                <div className="flex items-center justify-between mb-1.5">
+                  <button
+                    onClick={() => setPlanMode(!planMode)}
+                    className={cn(
+                      "text-[10px] px-2 py-0.5 rounded-full transition",
+                      planMode
+                        ? "bg-amber-500/15 text-amber-400 border border-amber-500/30"
+                        : "bg-zinc-800 text-zinc-500 border border-zinc-700"
+                    )}
+                  >
+                    {planMode ? "🔒 Plan Mode" : "⚡ Direct Mode"}
+                  </button>
+                  {pendingPlan && (
+                    <button
+                      onClick={() => setLeftPanel("plan")}
+                      className="text-[10px] text-amber-400 hover:text-amber-300"
+                    >
+                      View Plan →
+                    </button>
+                  )}
+                </div>
                 <form
                   onSubmit={(e) => {
                     e.preventDefault();
@@ -285,7 +407,7 @@ export function IdeWorkspace({ projectId, canEdit }: { projectId: string; canEdi
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     disabled={busy || !canEdit}
-                    placeholder="Describe your app..."
+                    placeholder={planMode ? "Describe what to build (plan first)..." : "Describe your app..."}
                     className="flex-1 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-[11px] outline-none focus:border-acc/50 text-zinc-200 placeholder-zinc-600 disabled:opacity-50"
                   />
                   <button
