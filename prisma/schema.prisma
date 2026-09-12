@@ -131,6 +131,89 @@ enum MessageRole {
   ASSISTANT
 }
 
+// ── Security Agent ──────────────────────────────────────────────────────────
+
+enum SecurityRunKind {
+  SCAN
+  INVESTIGATE
+  VALIDATE
+  REMEDIATE
+  VERIFY
+  FULL
+}
+
+enum SecurityRunStatus {
+  QUEUED
+  RUNNING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+enum SecurityFindingStatus {
+  QUEUED
+  INVESTIGATING
+  VALIDATION_REQUIRED
+  VALIDATING
+  CONFIRMED
+  FALSE_POSITIVE
+  REMEDIATION_READY
+  FIXED
+  VERIFIED
+}
+
+enum SecurityVerdict {
+  CONFIRMED
+  LIKELY
+  POTENTIAL
+  FALSE_POSITIVE
+}
+
+enum SecuritySeverity {
+  CRITICAL
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum SecurityRepoSource {
+  WORKSPACE
+  LINKED_REPO
+  GITHUB_LINK
+}
+
+enum SecurityAuthScope {
+  NONE
+  USER
+  EXPLICIT
+  SYSTEM
+}
+
+enum SecurityValidationStatus {
+  PENDING
+  RUNNING
+  EXPLOITABLE
+  NOT_EXPLOITABLE
+  INCONCLUSIVE
+  FAILED
+  SKIPPED
+}
+
+enum SecurityPatchStatus {
+  PROPOSED
+  APPLIED
+  DISCARDED
+}
+
+enum SecurityVerificationStatus {
+  PENDING
+  RUNNING
+  FIXED
+  STILL_VULNERABLE
+  INCONCLUSIVE
+  FAILED
+}
+
 // ── Auth (Auth.js Prisma adapter) ───────────────────────────────────────────
 
 model User {
@@ -159,6 +242,7 @@ model User {
   versionsCreated ProjectVersion[]   @relation("VersionAuthor")
   invitationsSent Invitation[]       @relation("InviteSender")
   invitationsAccepted Invitation[]   @relation("InviteAcceptor")
+  securityRuns    SecurityRun[]      @relation("SecurityRunAuthor")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -282,12 +366,204 @@ model Project {
   appFiles      AppFile[]
   appRuns       AppRun[]
   appCheckpoints AppCheckpoint[]
+  securityRuns        SecurityRun[]
+  securityFindings    SecurityFinding[]
+  securityActions     SecurityAction[]
+  securityValidations SecurityValidation[]
+  securityPatches     SecurityPatch[]
+  securityVerifications SecurityVerification[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([ownerId, status])
   @@index([updatedAt])
+}
+
+// ── Security Agent ──────────────────────────────────────────────────────────
+// Detect → Investigate → Safely Validate → Explain → Remediate → Verify.
+// All rows hang off Project (the isolation unit): every read/write path goes
+// through access.ts role checks, so project RBAC == org-level isolation.
+
+// One invocation of the security agent pipeline.
+model SecurityRun {
+  id          String            @id @default(cuid())
+  projectId   String
+  kind        SecurityRunKind   @default(SCAN)
+  status      SecurityRunStatus @default(QUEUED)
+  repoSource  SecurityRepoSource @default(WORKSPACE)
+  repoUrl     String? // github.com/owner/repo when scanned by link
+  repoBranch  String? @default("main")
+  fileCount   Int @default(0)
+  findingCount Int @default(0)
+  summary     String?
+  error       String?
+  tokensIn    Int @default(0)
+  tokensOut   Int @default(0)
+  durationMs  Int?
+  createdById String?
+  startedAt   DateTime @default(now())
+  finishedAt  DateTime?
+
+  project   Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation("SecurityRunAuthor", fields: [createdById], references: [id])
+  findings  SecurityFinding[]
+  actions   SecurityAction[]
+
+  @@index([projectId, startedAt])
+  @@index([status])
+}
+
+// A detected vulnerability with full AI investigation output.
+model SecurityFinding {
+  id         String               @id @default(cuid())
+  runId      String
+  projectId  String
+  ruleId     String // scanner rule id, e.g. "sast.sql-injection"
+  title      String
+  category   String @default("sast") // sast | dependency | secret | config | authz
+  severity   SecuritySeverity     @default(MEDIUM)
+  confidence Int @default(50) // 0..100
+  cwe        String? // e.g. CWE-89
+  cve        String?
+  filePath   String?
+  lineStart  Int?
+  lineEnd    Int?
+  snippet    String? // redacted code evidence
+  rootCause  String?
+  evidence   Json? // [{ file, line?, excerpt }]
+  impact     String?
+  recommendation String?
+  attackPath Json? // [{ label, detail, file?, line? }]
+  components Json? // [{ name, version?, ecosystem }] for dependency findings
+  verdict    SecurityVerdict?
+  verdictReason String?
+  aiAnalysis String?
+  status     SecurityFindingStatus @default(QUEUED)
+  fingerprint String // stable hash for dedupe across scans
+  fixedAt    DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  run       SecurityRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  project   Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  validations SecurityValidation[]
+  patches     SecurityPatch[]
+  verifications SecurityVerification[]
+  actions      SecurityAction[]
+
+  @@index([projectId, status])
+  @@index([projectId, severity])
+  @@index([projectId, fingerprint])
+  @@index([runId])
+}
+
+// Authorized sandbox proof-of-concept validation of one finding.
+model SecurityValidation {
+  id         String                  @id @default(cuid())
+  findingId  String
+  projectId  String
+  status     SecurityValidationStatus @default(PENDING)
+  environment String @default("isolated-sandbox")
+  authorized Boolean @default(false)
+  authorizedById String?
+  pocScript  String? // generated PoC (redacted, stored for audit)
+  evidence   Json? // [{ label, output?, exitCode?, durationMs? }]
+  output     String? // captured sandbox output (trimmed + redacted)
+  exploitReproduced Boolean @default(false)
+  durationMs Int?
+  sandboxId  String?
+  error      String?
+  startedAt  DateTime @default(now())
+  finishedAt DateTime?
+
+  finding SecurityFinding @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  project Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  verifications SecurityVerification[]
+
+  @@index([findingId, startedAt])
+  @@index([projectId, startedAt])
+}
+
+// AI-generated proposed patch — never auto-merged; applied via GitHub workflow.
+model SecurityPatch {
+  id         String             @id @default(cuid())
+  findingId  String
+  projectId  String
+  status     SecurityPatchStatus @default(PROPOSED)
+  summary    String?
+  rootCause  String?
+  strategy   String?
+  diff       String
+  verificationPlan String?
+  model      String?
+  tokensIn   Int @default(0)
+  tokensOut  Int @default(0)
+  appliedAt  DateTime?
+
+  finding SecurityFinding @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  project Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  verifications SecurityVerification[]
+
+  createdAt DateTime @default(now())
+
+  @@index([findingId, createdAt])
+}
+
+// Re-scan + re-validation after a fix is applied (before/after comparison).
+model SecurityVerification {
+  id         String                    @id @default(cuid())
+  findingId  String
+  projectId  String
+  patchId    String?
+  revalidationId String?
+  status     SecurityVerificationStatus @default(PENDING)
+  beforeState String? // "VULNERABLE" — the original validated state
+  rescan     Json? // { findingCount, reproduced, notes }
+  testsPassed Boolean?
+  testOutput String?
+  remainingRisks Json?
+  summary    String?
+  error      String?
+  durationMs Int?
+  startedAt  DateTime @default(now())
+  finishedAt DateTime?
+
+  finding     SecurityFinding     @relation(fields: [findingId], references: [id], onDelete: Cascade)
+  project     Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  patch       SecurityPatch?      @relation(fields: [patchId], references: [id])
+  revalidation SecurityValidation? @relation(fields: [revalidationId], references: [id])
+
+  @@index([findingId, startedAt])
+}
+
+// Append-only audit trail of every agent tool invocation.
+model SecurityAction {
+  id         String             @id @default(cuid())
+  projectId  String
+  runId      String?
+  findingId  String?
+  actorId    String?
+  tool       String // permission key, e.g. READ_REPOSITORY
+  action     String // human label, e.g. "investigate finding"
+  status     String @default("OK") // OK | DENIED | ERROR
+  authScope  SecurityAuthScope @default(USER)
+  authorized Boolean @default(false)
+  environment String? // e.g. "isolated-sandbox"
+  input      Json? // redacted input snapshot
+  result     Json? // redacted result snapshot
+  error      String?
+  durationMs Int?
+
+  project Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  run     SecurityRun?   @relation(fields: [runId], references: [id])
+  finding SecurityFinding? @relation(fields: [findingId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([projectId, createdAt])
+  @@index([runId])
+  @@index([findingId])
 }
 
 model ProjectVersion {

@@ -3,13 +3,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "next-auth/react";
-import { Hammer, FolderKanban, Settings, LogOut, ChevronDown } from "lucide-react";
+import { Hammer, FolderKanban, Settings, LogOut, ChevronDown, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function Shell({ children, userName }: { children: React.ReactNode; userName?: string | null }) {
   const pathname = usePathname();
   const links = [
     { href: "/projects", label: "Projects", icon: FolderKanban },
+    { href: "/security/agent", label: "Security Agent", icon: ShieldCheck },
     { href: "/settings", label: "Settings", icon: Settings },
   ];
   return (
