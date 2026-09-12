@@ -1437,3 +1437,71 @@ export const agentActions = pgTable(
     index("agent_actions_finding_idx").on(table.findingId),
   ]
 );
+
+// ═════════════════════════════════════════════════════════════════════════
+// WEBSITE URL TESTING — end-to-end web audit with final report
+// ═════════════════════════════════════════════════════════════════════════
+
+export const webAuditStatusEnum = pgEnum("web_audit_status", [
+  "running",
+  "completed",
+  "failed",
+]);
+
+export const webAuditSeverityEnum = pgEnum("web_audit_severity", [
+  "critical",
+  "high",
+  "medium",
+  "low",
+  "info",
+]);
+
+// One end-to-end audit of a website URL
+export const webAudits = pgTable(
+  "web_audits",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    url: text("url").notNull(),
+    status: webAuditStatusEnum("status").default("running").notNull(),
+    score: integer("score"), // 0-100 health score
+    summary: text("summary"),
+    error: text("error"),
+    durationMs: integer("duration_ms"),
+    createdById: uuid("created_by_id").references(() => users.id),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    finishedAt: timestamp("finished_at"),
+  },
+  (table) => [
+    index("web_audits_org_idx").on(table.orgId),
+    index("web_audits_status_idx").on(table.status),
+  ]
+);
+
+// Individual checks + bugs discovered during an audit
+export const webFindings = pgTable(
+  "web_findings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    auditId: uuid("audit_id")
+      .notNull()
+      .references(() => webAudits.id, { onDelete: "cascade" }),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    category: text("category").notNull(), // security | performance | seo | accessibility | content | availability
+    severity: webAuditSeverityEnum("severity").default("medium").notNull(),
+    checkId: text("check_id").notNull(),
+    title: text("title").notNull(),
+    detail: text("detail"),
+    evidence: text("evidence"),
+    recommendation: text("recommendation"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("web_findings_audit_idx").on(table.auditId),
+    index("web_findings_org_idx").on(table.orgId),
+  ]
+);

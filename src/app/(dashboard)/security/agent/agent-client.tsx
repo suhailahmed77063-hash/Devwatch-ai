@@ -15,7 +15,16 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Shield, Play, Loader2, Activity, FileSearch, Bug, Key, ScanSearch } from "lucide-react";
+import { Shield, Play, Loader2, Activity, FileSearch, Bug, Key, ScanSearch, Globe, Download } from "lucide-react";
+
+interface WebAuditRow {
+  id: string;
+  url: string;
+  status: string;
+  score: number | null;
+  summary: string | null;
+  createdAt: string;
+}
 
 interface Finding {
   id: string;
@@ -97,6 +106,22 @@ function statusBadge(status: string | null) {
   }
 }
 
+interface WebAuditResponse {
+  audit: { id: string; url: string; finalUrl: string; status: string; score: number; summary: string };
+  findings: Array<{
+    category: string;
+    severity: "critical" | "high" | "medium" | "low" | "info";
+    checkId: string;
+    title: string;
+    detail?: string;
+    evidence?: string;
+    recommendation?: string;
+  }>;
+  timings: { totalMs: number; ttfbMs: number | null };
+  pageMeta: { title?: string; description?: string; h1Count: number; imgWithoutAlt: number };
+  checkedPaths: Array<{ path: string; status: number | null }>;
+}
+
 function verdictBadge(verdict: string | null) {
   switch (verdict) {
     case "confirmed": return <Badge variant="destructive">Confirmed exploitable</Badge>;
@@ -126,6 +151,13 @@ export default function AgentClient() {
   const [error, setError] = useState<string | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
+  // Website testing state
+  const [siteUrl, setSiteUrl] = useState("");
+  const [webAuditing, setWebAuditing] = useState(false);
+  const [webResult, setWebResult] = useState<WebAuditResponse | null>(null);
+  const [webError, setWebError] = useState<string | null>(null);
+  const [webHistory, setWebHistory] = useState<WebAuditRow[]>([]);
+
   const refresh = useCallback(() => setRefreshKey((k) => k + 1), []);
 
   useEffect(() => {
@@ -139,6 +171,12 @@ export default function AgentClient() {
           const body = await res.json().catch(() => ({}));
           setError(body.error ?? "Failed to load dashboard");
         }
+        fetch("/api/security/agent/web-audits")
+          .then((r) => (r.ok ? r.json() : null))
+          .then((b) => {
+            if (!cancelled && b?.audits) setWebHistory(b.audits);
+          })
+          .catch(() => undefined);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -147,6 +185,32 @@ export default function AgentClient() {
       cancelled = true;
     };
   }, [refreshKey]);
+
+  const runWebAuditNow = async () => {
+    if (!siteUrl.trim()) return;
+    setWebAuditing(true);
+    setWebError(null);
+    setWebResult(null);
+    try {
+      const res = await fetch("/api/security/agent/web-audit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: siteUrl.trim() }),
+      });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error ?? "Audit failed");
+      setWebResult(body);
+      refresh();
+      fetch("/api/security/agent/web-audits")
+        .then((r) => (r.ok ? r.json() : null))
+        .then((b) => setWebHistory(b?.audits ?? []))
+        .catch(() => undefined);
+    } catch (err) {
+      setWebError(err instanceof Error ? err.message : "Audit failed");
+    } finally {
+      setWebAuditing(false);
+    }
+  };
 
   const startScan = async () => {
     if (!repoLink.trim()) return;
@@ -287,6 +351,85 @@ export default function AgentClient() {
             (SAST · secrets · dependencies · configuration), then investigates every finding with AI. Sandbox
             validation is separate and always requires explicit authorization.
           </p>
+        </CardContent>
+      </Card>
+
+      {/* Website testing */}
+      <Card>
+        <CardHeader className="pb-3">
+          <CardTitle className="flex items-center gap-2 text-base">
+            <Globe className="h-4 w-4 text-primary" /> Website Testing — test any site link
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Input
+              placeholder="https://example.com — enter any website URL to test"
+              value={siteUrl}
+              onChange={(e) => setSiteUrl(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && !webAuditing && runWebAuditNow()}
+              disabled={webAuditing}
+            />
+            <Button onClick={runWebAuditNow} disabled={webAuditing || !siteUrl.trim()} className="sm:w-44">
+              {webAuditing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Globe className="h-4 w-4" />}
+              {webAuditing ? "Testing…" : "Test Website"}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Read-only end-to-end checks: availability, HTTPS, security headers, cookies, mixed content, exposed
+            sensitive paths, SEO, accessibility and performance — then a final download-ready report. No
+            exploitation, no destructive actions.
+          </p>
+
+          {webError && (
+            <div className="rounded-md border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-600 dark:text-red-400">{webError}</div>
+          )}
+
+          {webResult && (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex h-14 w-14 items-center justify-center rounded-full border-2 text-lg font-bold
+                  ${webResult.audit.score >= 90 ? 'text-green-500 border-green-500' : webResult.audit.score >= 75 ? 'text-yellow-500 border-yellow-500' : 'text-red-500 border-red-500'}">
+                  {webResult.audit.score}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium">{webResult.audit.summary}</p>
+                  <p className="truncate font-mono text-xs text-muted-foreground">{webResult.audit.finalUrl}</p>
+                </div>
+                <a
+                  href={`/api/security/agent/web-audit/${webResult.audit.id}/report`}
+                  className="inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm hover:bg-muted"
+                >
+                  <Download className="h-4 w-4" /> Download Report
+                </a>
+              </div>
+              <div className="space-y-1.5">
+                {webResult.findings.filter((f) => f.severity !== "info").map((f, i) => (
+                  <div key={i} className="flex flex-wrap items-center gap-2 rounded-md border p-2 text-sm">
+                    {severityBadge(f.severity === "info" ? "low" : f.severity)}
+                    <Badge variant="outline" className="text-xs">{f.category}</Badge>
+                    <span>{f.title}</span>
+                    {f.recommendation && <span className="text-xs text-muted-foreground">→ {f.recommendation}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {webHistory.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-muted-foreground">Recent audits</p>
+              {webHistory.slice(0, 5).map((a) => (
+                <div key={a.id} className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                  <Badge variant={a.status === "completed" ? "secondary" : "destructive"} className="text-xs">{a.status}</Badge>
+                  <span className="font-mono">{a.url}</span>
+                  {a.score !== null && <span>score {a.score}/100</span>}
+                  <a href={`/api/security/agent/web-audit/${a.id}/report`} className="text-primary hover:underline">report</a>
+                  <span className="ml-auto">{new Date(a.createdAt).toLocaleString()}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
 
