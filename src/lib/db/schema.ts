@@ -1468,6 +1468,8 @@ export const webAudits = pgTable(
     status: webAuditStatusEnum("status").default("running").notNull(),
     score: integer("score"), // 0-100 health score
     summary: text("summary"),
+    fixPlan: jsonb("fix_plan"), // AI fix plan per finding
+    validations: jsonb("validations"), // exploit-probe outcomes
     error: text("error"),
     durationMs: integer("duration_ms"),
     createdById: uuid("created_by_id").references(() => users.id),
@@ -1498,6 +1500,8 @@ export const webFindings = pgTable(
     detail: text("detail"),
     evidence: text("evidence"),
     recommendation: text("recommendation"),
+    validated: boolean("validated").default(false).notNull(), // exploited by a safe probe
+    validationNote: text("validation_note"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [

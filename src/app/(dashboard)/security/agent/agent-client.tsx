@@ -117,6 +117,21 @@ interface WebAuditResponse {
     evidence?: string;
     recommendation?: string;
   }>;
+  validations: Array<{
+    findingCheckId: string;
+    probe: string;
+    request: string;
+    status: "exploited" | "mitigated" | "inconclusive";
+    evidence?: string;
+  }>;
+  fixPlan: Array<{
+    findingTitle: string;
+    severity: string;
+    validated: boolean;
+    problem: string;
+    fix: string;
+    verification: string;
+  }>;
   timings: { totalMs: number; ttfbMs: number | null };
   pageMeta: { title?: string; description?: string; h1Count: number; imgWithoutAlt: number };
   checkedPaths: Array<{ path: string; status: number | null }>;
@@ -404,15 +419,66 @@ export default function AgentClient() {
                 </a>
               </div>
               <div className="space-y-1.5">
-                {webResult.findings.filter((f) => f.severity !== "info").map((f, i) => (
-                  <div key={i} className="flex flex-wrap items-center gap-2 rounded-md border p-2 text-sm">
-                    {severityBadge(f.severity === "info" ? "low" : f.severity)}
-                    <Badge variant="outline" className="text-xs">{f.category}</Badge>
-                    <span>{f.title}</span>
-                    {f.recommendation && <span className="text-xs text-muted-foreground">→ {f.recommendation}</span>}
-                  </div>
-                ))}
+                {webResult.findings.filter((f) => f.severity !== "info").map((f, i) => {
+                  const exploited = webResult?.validations.some(
+                    (v) => v.status === "exploited" &&
+                      (v.findingCheckId === f.checkId ||
+                        (f.checkId === "xss.reflection" && v.findingCheckId === "exploit.xss-reflection") ||
+                        (f.checkId === "sqli.error-leak" && v.findingCheckId === "exploit.sqli-errors") ||
+                        (f.checkId === "redirect.open" && v.findingCheckId === "exploit.open-redirect") ||
+                        (f.checkId === "cors.permissive" && v.findingCheckId === "exploit.cors") ||
+                        (f.checkId === "exposure.dir-listing" && v.findingCheckId === "exploit.dir-listing") ||
+                        (f.checkId === "methods.dangerous" && v.findingCheckId === "exploit.http-methods"))
+                  );
+                  return (
+                    <div key={i} className="flex flex-wrap items-center gap-2 rounded-md border p-2 text-sm">
+                      {severityBadge(f.severity === "info" ? "low" : f.severity)}
+                      <Badge variant="outline" className="text-xs">{f.category}</Badge>
+                      <span>{f.title}</span>
+                      {exploited && <Badge variant="destructive" className="text-xs">🔴 exploit validated</Badge>}
+                      {f.recommendation && <span className="text-xs text-muted-foreground">→ {f.recommendation}</span>}
+                    </div>
+                  );
+                })}
               </div>
+
+              {/* Exploit validation results */}
+              {webResult.validations.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-xs font-medium text-muted-foreground">Exploit validation (safe, non-destructive probes)</p>
+                  {webResult.validations.map((v, i) => (
+                    <div key={i} className="flex flex-wrap items-center gap-2 rounded-md border bg-muted/30 p-2 text-xs">
+                      <Badge
+                        variant={v.status === "exploited" ? "destructive" : v.status === "mitigated" ? "secondary" : "outline"}
+                        className={v.status === "mitigated" ? "bg-green-500/10 text-green-500" : "text-xs"}
+                      >
+                        {v.status === "exploited" ? "🔴 EXPLOITED" : v.status === "mitigated" ? "🟢 mitigated" : "⚪ inconclusive"}
+                      </Badge>
+                      <span className="font-mono">{v.probe}</span>
+                      {v.evidence && <span className="text-muted-foreground">— {v.evidence.slice(0, 140)}</span>}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* Fix plan */}
+              {webResult.fixPlan.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Fix plan (problem → fix → verification)</p>
+                  {webResult.fixPlan.map((p, i) => (
+                    <div key={i} className="rounded-md border p-3 text-sm">
+                      <div className="flex flex-wrap items-center gap-2">
+                        {severityBadge(p.severity === "info" ? "low" : p.severity)}
+                        <span className="font-medium">{p.findingTitle}</span>
+                        {p.validated && <Badge variant="destructive" className="text-xs">exploit validated</Badge>}
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground"><span className="font-medium text-foreground">Problem:</span> {p.problem}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground"><span className="font-medium text-foreground">Fix:</span> {p.fix}</p>
+                      <p className="mt-0.5 text-xs text-muted-foreground"><span className="font-medium text-foreground">Verification:</span> {p.verification}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 

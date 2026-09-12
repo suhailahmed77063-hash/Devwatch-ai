@@ -39,6 +39,9 @@ export async function POST(request: NextRequest) {
       const issues = result.findings.filter((f) => f.severity !== "info");
 
       if (result.findings.length > 0) {
+        const exploitedIds = new Set(
+          result.validations.filter((v) => v.status === "exploited").map((v) => v.findingCheckId)
+        );
         await db.insert(webFindings).values(
           result.findings.map((f) => ({
             auditId: audit.id,
@@ -50,6 +53,8 @@ export async function POST(request: NextRequest) {
             detail: f.detail ?? null,
             evidence: f.evidence ?? null,
             recommendation: f.recommendation ?? null,
+            validated: exploitedIds.has(f.checkId),
+            validationNote: result.validations.find((v) => v.findingCheckId === f.checkId)?.evidence ?? null,
           }))
         );
       }
@@ -60,6 +65,8 @@ export async function POST(request: NextRequest) {
           status: "completed",
           score: result.score,
           summary: result.summary,
+          fixPlan: result.fixPlan,
+          validations: result.validations,
           durationMs: Date.now() - started,
           finishedAt: new Date(),
         })
@@ -72,7 +79,7 @@ export async function POST(request: NextRequest) {
         action: "web_audit_completed",
         environment: "server",
         input: JSON.stringify({ url: body.url }),
-        result: JSON.stringify({ score: result.score, issues: issues.length }),
+        result: JSON.stringify({ score: result.score, issues: issues.length, exploited: result.validations.filter((v) => v.status === "exploited").length }),
         durationMs: Date.now() - started,
       });
 
@@ -86,6 +93,8 @@ export async function POST(request: NextRequest) {
           summary: result.summary,
         },
         findings: result.findings,
+        validations: result.validations,
+        fixPlan: result.fixPlan,
         timings: result.timings,
         pageMeta: result.pageMeta,
         checkedPaths: result.checkedPaths,

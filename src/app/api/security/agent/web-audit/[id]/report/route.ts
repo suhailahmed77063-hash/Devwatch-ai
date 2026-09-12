@@ -37,6 +37,8 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
       recommendation: r.recommendation ?? undefined,
     }));
 
+    const validations = (audit.validations as WebAuditResult["validations"]) ?? [];
+    const fixPlan = (audit.fixPlan as WebAuditResult["fixPlan"]) ?? [];
     const score = audit.score ?? 0;
     const pseudo: WebAuditResult = {
       url: audit.url,
@@ -44,6 +46,8 @@ export async function GET(_request: NextRequest, ctx: { params: Promise<{ id: st
       reachable: audit.status !== "failed",
       https: audit.url.startsWith("https://"),
       findings,
+      validations,
+      fixPlan,
       score,
       summary: audit.summary ?? "",
       timings: { totalMs: audit.durationMs ?? 0, ttfbMs: null, loadMs: null },
