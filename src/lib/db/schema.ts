@@ -499,6 +499,76 @@ export const codeFindings = pgTable(
   ]
 );
 
+// ── AI Security Agent enums ────────────────────────────────────────────────
+
+export const agentVerdictEnum = pgEnum("agent_verdict", [
+  "confirmed",
+  "likely",
+  "potential",
+  "false_positive",
+]);
+
+export const agentFindingStatusEnum = pgEnum("agent_finding_status", [
+  "queued",
+  "investigating",
+  "validation_required",
+  "validating",
+  "confirmed",
+  "false_positive",
+  "remediation_ready",
+  "fixed",
+  "verified",
+]);
+
+export const agentRunKindEnum = pgEnum("agent_run_kind", [
+  "scan",
+  "investigate",
+  "validate",
+  "remediate",
+  "verify",
+  "full",
+]);
+
+export const agentRunStatusEnum = pgEnum("agent_run_status", [
+  "queued",
+  "running",
+  "completed",
+  "failed",
+  "cancelled",
+]);
+
+export const agentValidationStatusEnum = pgEnum("agent_validation_status", [
+  "pending",
+  "running",
+  "exploitable",
+  "not_exploitable",
+  "inconclusive",
+  "failed",
+  "skipped",
+]);
+
+export const agentPatchStatusEnum = pgEnum("agent_patch_status", [
+  "proposed",
+  "applied",
+  "discarded",
+]);
+
+export const agentVerificationStatusEnum = pgEnum("agent_verification_status", [
+  "pending",
+  "running",
+  "fixed",
+  "still_vulnerable",
+  "inconclusive",
+  "failed",
+]);
+
+export const agentAuthScopeEnum = pgEnum("agent_auth_scope", [
+  "none",
+  "user",
+  "explicit",
+  "system",
+]);
+
 export const securityFindings = pgTable(
   "security_findings",
   {
@@ -517,11 +587,34 @@ export const securityFindings = pgTable(
     cweId: text("cwe_id"),
     cvssScore: integer("cvss_score"),
     source: text("source").default("scanner"),
+    // ── AI Security Agent extension ──
+    orgId: uuid("org_id"),
+    runId: uuid("run_id"),
+    ruleId: text("rule_id"),
+    cveId: text("cve_id"),
+    lineEnd: integer("line_end"),
+    snippet: text("snippet"),
+    rootCause: text("root_cause"),
+    evidence: jsonb("evidence"),
+    impact: text("impact"),
+    attackPath: jsonb("attack_path"),
+    components: jsonb("components"),
+    verdict: agentVerdictEnum("verdict"),
+    verdictReason: text("verdict_reason"),
+    aiAnalysis: text("ai_analysis"),
+    agentStatus: agentFindingStatusEnum("agent_status").default("queued"),
+    confidence: integer("confidence"),
+    fingerprint: text("fingerprint"),
+    fixedAt: timestamp("fixed_at"),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (table) => [
     index("sec_findings_repo_idx").on(table.repoId),
     index("sec_findings_severity_idx").on(table.severity),
+    index("sec_findings_agent_status_idx").on(table.agentStatus),
+    index("sec_findings_run_idx").on(table.runId),
+    index("sec_findings_fingerprint_idx").on(table.fingerprint),
   ]
 );
 
@@ -1193,5 +1286,154 @@ export const engineeringRelationships = pgTable(
     index("eng_rels_source_idx").on(table.sourceEntityType, table.sourceEntityId),
     index("eng_rels_target_idx").on(table.targetEntityType, table.targetEntityId),
     index("eng_rels_type_idx").on(table.relationshipType),
+  ]
+);
+
+// ═════════════════════════════════════════════════════════════════════════
+// AI SECURITY AGENT
+// Detect → Investigate → Safely Validate → Explain → Remediate → Verify
+// ═════════════════════════════════════════════════════════════════════════
+
+// One invocation of the security agent pipeline
+export const agentRuns = pgTable(
+  "agent_runs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    repoId: uuid("repo_id").references(() => repositories.id, { onDelete: "cascade" }),
+    repoLink: text("repo_link"), // github.com/owner/repo when scanned by link
+    branch: text("branch").default("main"),
+    kind: agentRunKindEnum("kind").default("full").notNull(),
+    status: agentRunStatusEnum("status").default("queued").notNull(),
+    fileCount: integer("file_count").default(0),
+    findingCount: integer("finding_count").default(0),
+    summary: text("summary"),
+    error: text("error"),
+    durationMs: integer("duration_ms"),
+    createdById: uuid("created_by_id").references(() => users.id),
+    startedAt: timestamp("started_at").defaultNow().notNull(),
+    finishedAt: timestamp("finished_at"),
+  },
+  (table) => [
+    index("agent_runs_org_idx").on(table.orgId),
+    index("agent_runs_repo_idx").on(table.repoId),
+    index("agent_runs_status_idx").on(table.status),
+  ]
+);
+
+// Authorized sandbox PoC validation of one finding
+export const agentValidations = pgTable(
+  "agent_validations",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    findingId: uuid("finding_id")
+      .notNull()
+      .references(() => securityFindings.id, { onDelete: "cascade" }),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    status: agentValidationStatusEnum("status").default("pending").notNull(),
+    environment: text("environment").default("isolated-sandbox").notNull(),
+    authorized: boolean("authorized").default(false).notNull(),
+    authorizedById: uuid("authorized_by_id").references(() => users.id),
+    pocScript: text("poc_script"),
+    evidence: jsonb("evidence"),
+    output: text("output"),
+    exploitReproduced: boolean("exploit_reproduced").default(false).notNull(),
+    durationMs: integer("duration_ms"),
+    error: text("error"),
+    startedAt: timestamp("started_at").defaultNow().notNull(),
+    finishedAt: timestamp("finished_at"),
+  },
+  (table) => [
+    index("agent_validations_finding_idx").on(table.findingId),
+    index("agent_validations_org_idx").on(table.orgId),
+  ]
+);
+
+// AI-generated proposed patch — never auto-merged
+export const agentPatches = pgTable(
+  "agent_patches",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    findingId: uuid("finding_id")
+      .notNull()
+      .references(() => securityFindings.id, { onDelete: "cascade" }),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    status: agentPatchStatusEnum("status").default("proposed").notNull(),
+    summary: text("summary"),
+    rootCause: text("root_cause"),
+    strategy: text("strategy"),
+    diff: text("diff").notNull(),
+    verificationPlan: text("verification_plan"),
+    model: text("model"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("agent_patches_finding_idx").on(table.findingId),
+    index("agent_patches_org_idx").on(table.orgId),
+  ]
+);
+
+// Re-scan + re-validation after a fix is applied
+export const agentVerifications = pgTable(
+  "agent_verifications",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    findingId: uuid("finding_id")
+      .notNull()
+      .references(() => securityFindings.id, { onDelete: "cascade" }),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    patchId: uuid("patch_id").references(() => agentPatches.id),
+    status: agentVerificationStatusEnum("status").default("pending").notNull(),
+    beforeState: text("before_state"),
+    rescan: jsonb("rescan"),
+    testsPassed: boolean("tests_passed"),
+    remainingRisks: jsonb("remaining_risks"),
+    summary: text("summary"),
+    error: text("error"),
+    durationMs: integer("duration_ms"),
+    startedAt: timestamp("started_at").defaultNow().notNull(),
+    finishedAt: timestamp("finished_at"),
+  },
+  (table) => [
+    index("agent_verifications_finding_idx").on(table.findingId),
+    index("agent_verifications_org_idx").on(table.orgId),
+  ]
+);
+
+// Append-only audit trail of every agent tool invocation
+export const agentActions = pgTable(
+  "agent_actions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    orgId: uuid("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    runId: uuid("run_id").references(() => agentRuns.id, { onDelete: "set null" }),
+    findingId: uuid("finding_id").references(() => securityFindings.id, { onDelete: "set null" }),
+    actorId: uuid("actor_id").references(() => users.id),
+    tool: text("tool").notNull(),
+    action: text("action").notNull(),
+    status: text("status").default("OK").notNull(),
+    authScope: agentAuthScopeEnum("auth_scope").default("user").notNull(),
+    authorized: boolean("authorized").default(false).notNull(),
+    environment: text("environment"),
+    input: jsonb("input"),
+    result: jsonb("result"),
+    error: text("error"),
+    durationMs: integer("duration_ms"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("agent_actions_org_idx").on(table.orgId),
+    index("agent_actions_run_idx").on(table.runId),
+    index("agent_actions_finding_idx").on(table.findingId),
   ]
 );
